@@ -59,13 +59,20 @@ calibrate).
   analytics (fillers, WPM, pauses); extend the live coach to speech + focus;
   "set your key points -> did you cover them / did you lose your thread";
   longitudinal progress view. *Done (pauses/prosody still open).*
-- **Phase 2 — pressure & anxiety.** Multi-agent heckler/distraction director +
-  audience as audio + on-screen text first; focus-under-pressure scoring;
-  anxiety layer (grounding, exposure ladder, CBT reflection).
-- **Phase 3 — embodiment.** Client-side WebGL talking-head lip-synced to Kokoro;
-  scripted crowd; ambient soundscapes.
+- **Phase 2 — pressure & anxiety.** Heckler/distraction director +
+  audience as audio + on-screen text; composure-under-pressure scoring;
+  anxiety layer (grounding breath, exposure ladder, reflection). *First
+  version done: scripted director (`backend/app/sessions/pressure.py`);
+  an LLM-driven multi-agent director is the natural upgrade.*
+- **Phase 3 — embodiment.** Talking-head lip-synced to Kokoro; scripted
+  crowd; ambient soundscapes. *First version done, deliberately light:
+  a stylized SVG head driven by a WebAudio analyser, a reactive crowd
+  strip, and procedural room ambience. Photoreal/3D avatars
+  (SadTalker/LivePortrait or engine-based) remain the upgrade path.*
 - **Phase 4 — immersion.** Unity/WebXR (VR) audience for real presence;
-  photoreal environments; advanced avatars.
+  photoreal environments; advanced avatars. *Not started: needs a game
+  engine project, 3D assets, and headset hardware for testing — out of
+  reach of the local web stack by design.*
 
 ## Technology notes
 

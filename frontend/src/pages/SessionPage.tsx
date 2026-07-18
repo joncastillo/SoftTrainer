@@ -222,7 +222,7 @@ export function SessionPage() {
         </div>
 
         <aside className="side-panel">
-          <CameraPanel onFrame={socket.sendFrame} rolling={socket.rolling} />
+          <CameraPanel onFrame={socket.sendFrame} rolling={socket.rolling} tip={socket.coachTip} />
           <div className="mic-controls">
             <button className={micOn ? "danger" : "primary"} onClick={toggleMic} disabled={socket.ended}>
               {micOn ? "Mute microphone" : "Enable microphone"}

@@ -18,6 +18,7 @@ from ..llm.registry import get_provider
 from ..rag import store as rag_store
 from ..speech import engines, kyutai
 from ..vision.behavior import BehaviorAnalyzer
+from ..vision.coach import BehaviorCoach
 from .prompts import FORCE_END_NOTE, WRAPUP_NOTE, build_system_prompt
 from .report import generate_report
 
@@ -129,6 +130,7 @@ class LiveSession:
         self.ws = ws
         self.provider = get_provider(meta.get("provider_id"))
         self.behavior = BehaviorAnalyzer()
+        self.coach = BehaviorCoach()
         self.history: list[dict] = []
         self.started_at = time.time()
         self.deadline = self.started_at + meta.get("duration_minutes", 15) * 60
@@ -254,6 +256,9 @@ class LiveSession:
         if self._frame_count % 4 == 0:
             await self.send({"type": "metrics", "sample": sample,
                              "rolling": self.behavior.summary()})
+            tip = self.coach.observe(self.behavior.samples)
+            if tip is not None:
+                await self.send({"type": "coach_tip", **tip})
 
     async def end(self, reason: str) -> None:
         """Close the session, generate and send the final report."""

@@ -127,6 +127,18 @@ button.chip {
   font-size: 12px; background: rgba(0,0,0,0.55);
   padding: 4px 8px; border-radius: 6px;
 }
+.camera-coach-tip {
+  position: absolute; top: 8px; left: 8px; right: 8px;
+  font-size: 13px; line-height: 1.35; color: #fff;
+  background: rgba(0, 0, 0, 0.72); border-left: 3px solid #f0a020;
+  padding: 8px 10px; border-radius: 6px;
+  animation: coach-tip-in 0.25s ease-out;
+}
+.camera-coach-tip.positive { border-left-color: #33b970; }
+@keyframes coach-tip-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .text-input { display: flex; gap: 8px; }
 .text-input textarea { flex: 1; }
 

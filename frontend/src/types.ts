@@ -92,3 +92,10 @@ export interface ChatMessage {
   text: string;
   streaming?: boolean;
 }
+
+export interface CoachTip {
+  id: number;
+  text: string;
+  kind?: string;
+  tone?: "nudge" | "positive";
+}

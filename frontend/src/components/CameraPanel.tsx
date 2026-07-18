@@ -1,17 +1,28 @@
 // Webcam preview that periodically ships frames to the backend.
 
-import { useEffect, useRef } from "react";
-import type { BehaviorSummary } from "../types";
+import { useEffect, useRef, useState } from "react";
+import type { BehaviorSummary, CoachTip } from "../types";
 
 interface Props {
   onFrame: (jpegB64: string) => void;
   rolling: BehaviorSummary | null;
+  tip?: CoachTip | null;
   intervalMs?: number;
 }
 
-export function CameraPanel({ onFrame, rolling, intervalMs = 700 }: Props) {
+export function CameraPanel({ onFrame, rolling, tip, intervalMs = 700 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [shownTip, setShownTip] = useState<CoachTip | null>(null);
+
+  // Surface each new coaching tip briefly, then let it fade on its own so
+  // it never lingers or stacks up over the camera preview.
+  useEffect(() => {
+    if (!tip) return;
+    setShownTip(tip);
+    const t = window.setTimeout(() => setShownTip(null), 6000);
+    return () => clearTimeout(t);
+  }, [tip]);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -48,6 +59,11 @@ export function CameraPanel({ onFrame, rolling, intervalMs = 700 }: Props) {
     <div className="camera-panel">
       <video ref={videoRef} autoPlay muted playsInline />
       <canvas ref={canvasRef} style={{ display: "none" }} />
+      {shownTip && (
+        <div className={`camera-coach-tip ${shownTip.tone ?? "nudge"}`} role="status">
+          {shownTip.text}
+        </div>
+      )}
       {rolling?.available && (
         <div className="camera-stats">
           <span>Eye contact {rolling.eye_contact_pct ?? 0}%</span>

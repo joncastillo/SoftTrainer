@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioQueue } from "../audio/player";
 import { backendWsBase } from "../backend";
-import type { BehaviorSummary, ChatMessage, Report } from "../types";
+import type { BehaviorSummary, ChatMessage, CoachTip, Report } from "../types";
 
 export interface ServerSpeech {
   stt_available: boolean;
@@ -21,6 +21,7 @@ export interface SessionSocketState {
   speaking: boolean;
   serverSpeech: ServerSpeech | null;
   rolling: BehaviorSummary | null;
+  coachTip: CoachTip | null;
   report: Report | null;
   generatingReport: boolean;
   ended: boolean;
@@ -48,6 +49,7 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
     speaking: false,
     serverSpeech: null,
     rolling: null,
+    coachTip: null,
     report: null,
     generatingReport: false,
     ended: false,
@@ -124,6 +126,16 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
             return { ...s, partial: msg.text };
           case "metrics":
             return { ...s, rolling: msg.rolling };
+          case "coach_tip":
+            return {
+              ...s,
+              coachTip: {
+                id: (s.coachTip?.id ?? 0) + 1,
+                text: msg.text,
+                kind: msg.kind,
+                tone: msg.tone,
+              },
+            };
           case "generating_report":
             return { ...s, generatingReport: true };
           case "session_ended":

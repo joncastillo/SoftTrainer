@@ -27,7 +27,15 @@ calibrate).
 - Bidirectional voice: Kyutai STT, Kokoro TTS, browser fallbacks.
 - Camera behavior sensing via MediaPipe (eye contact, head pose, expression,
   confidence) and a **live rule-based coaching layer** (`backend/app/vision/coach.py`)
-  that surfaces on-screen tips during the session.
+  that surfaces on-screen tips during the session, including sustained
+  gaze-off-screen ("you drifted") detection.
+- Speech delivery analysis (`backend/app/sessions/delivery.py`): filler words
+  and speaking pace, live tips plus a report section.
+- Key points + lost-thread coaching (`backend/app/sessions/keypoints.py`):
+  the user sets up to five points, a live checklist tracks lexical coverage,
+  thread-loss moments get a recovery tip anchored to the next uncovered point.
+- Longitudinal progress view: `/api/progress` + a Progress page with
+  per-metric trend tiles and a session table.
 - RAG document grounding; self-hosted or cloud LLM providers.
 
 ## Capability map
@@ -50,7 +58,7 @@ calibrate).
 - **Phase 1 — deepen sensing & coaching (local, no new heavy tech).** Speech
   analytics (fillers, WPM, pauses); extend the live coach to speech + focus;
   "set your key points -> did you cover them / did you lose your thread";
-  longitudinal progress view. *Highest ROI, chosen next.*
+  longitudinal progress view. *Done (pauses/prosody still open).*
 - **Phase 2 — pressure & anxiety.** Multi-agent heckler/distraction director +
   audience as audio + on-screen text first; focus-under-pressure scoring;
   anxiety layer (grounding, exposure ladder, CBT reflection).

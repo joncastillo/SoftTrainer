@@ -7,11 +7,14 @@ back to browser speech APIs when these report unavailable.
 """
 
 import asyncio
+import logging
 import struct
 import threading
 from typing import Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 STT_REPO = "kyutai/stt-1b-en_fr"
 SAMPLE_RATE = 24000
@@ -19,6 +22,10 @@ SAMPLE_RATE = 24000
 _lock = threading.Lock()
 _stt = None
 _tts = None
+# Set when constructing a model actually fails (e.g. out of memory, missing
+# weights). Import succeeding is not enough to promise the models will load,
+# so this gates the reported availability and drives the browser fallback.
+_load_failed = False
 
 
 def moshi_available() -> bool:
@@ -136,24 +143,42 @@ class KyutaiTTS:
 
 
 def get_stt() -> Optional[KyutaiSTT]:
-    """Return the shared STT instance, loading it on first call."""
-    global _stt
-    if not moshi_available():
+    """Return the shared STT instance, loading it on first call.
+
+    Returns None (and flips the app to browser speech) if the model cannot
+    be constructed, instead of letting the failure abort the session.
+    """
+    global _stt, _load_failed
+    if not moshi_available() or _load_failed:
         return None
     with _lock:
         if _stt is None:
-            _stt = KyutaiSTT()
+            try:
+                _stt = KyutaiSTT()
+            except Exception:
+                logger.exception("Failed to load Kyutai STT model; falling back to browser speech")
+                _load_failed = True
+                return None
     return _stt
 
 
 def get_tts() -> Optional[KyutaiTTS]:
-    """Return the shared TTS instance, loading it on first call."""
-    global _tts
-    if not moshi_available():
+    """Return the shared TTS instance, loading it on first call.
+
+    Returns None on load failure so TTS degrades to browser speech synthesis
+    rather than crashing the reply.
+    """
+    global _tts, _load_failed
+    if not moshi_available() or _load_failed:
         return None
     with _lock:
         if _tts is None:
-            _tts = KyutaiTTS()
+            try:
+                _tts = KyutaiTTS()
+            except Exception:
+                logger.exception("Failed to load Kyutai TTS model; falling back to browser speech")
+                _load_failed = True
+                return None
     return _tts
 
 
@@ -167,7 +192,7 @@ async def synthesize_async(text: str) -> Optional[bytes]:
 
 def speech_status() -> dict:
     return {
-        "available": moshi_available(),
+        "available": moshi_available() and not _load_failed,
         "stt_loaded": _stt is not None,
         "tts_loaded": _tts is not None,
         "stt_model": STT_REPO,

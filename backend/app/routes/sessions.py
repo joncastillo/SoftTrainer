@@ -1,12 +1,15 @@
 """Session lifecycle REST endpoints and the live WebSocket."""
 
 import json
+import logging
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from .. import storage
 from ..schemas import SessionCreate
 from ..sessions.manager import LiveSession
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -49,6 +52,7 @@ async def session_socket(ws: WebSocket, session_id: str) -> None:
     try:
         live = LiveSession(session_id, ws)
     except Exception as e:
+        logger.exception("Failed to start session %s", session_id)
         await ws.send_json({"type": "error", "message": str(e)})
         await ws.close()
         return
@@ -73,6 +77,7 @@ async def session_socket(ws: WebSocket, session_id: str) -> None:
         if not live.ended:
             storage.update_meta(session_id, status="disconnected")
     except Exception as e:
+        logger.exception("Error in session %s", session_id)
         try:
             await ws.send_json({"type": "error", "message": str(e)})
         except Exception:

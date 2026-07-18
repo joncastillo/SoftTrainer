@@ -9,9 +9,11 @@ feedback and a written assessment at the end.
 
 - Free form scenarios: interviews, negotiations, difficult conversations,
   pitches, anything you can describe.
-- Bidirectional voice with Kyutai models: streaming speech to text
-  (kyutai/stt-1b-en_fr) and text to speech through the moshi package.
-  Falls back to browser speech APIs when they are not installed.
+- Bidirectional voice: streaming speech to text with Kyutai
+  (kyutai/stt-1b-en_fr) and natural text to speech with Kokoro 82M,
+  spoken sentence by sentence while the reply is still being generated.
+  Kyutai TTS is the second choice engine, and the browser speech APIs
+  are the final fallback when neither is installed.
 - Camera behavior assessment with MediaPipe: eye contact, gaze, blink rate,
   head stability, smile, and a rolling confidence score.
 - Sessions are bounded like real meetings. The trainer wraps up naturally
@@ -76,7 +78,8 @@ The app runs with the core requirements alone and degrades gracefully:
 
 | Capability | Needs | Fallback |
 | --- | --- | --- |
-| Kyutai STT/TTS | moshi | Browser SpeechRecognition and speechSynthesis |
+| Natural TTS (preferred) | kokoro, soundfile | Kyutai TTS, then browser speechSynthesis |
+| Streaming STT | moshi | Browser SpeechRecognition |
 | Camera analysis | mediapipe, opencv | Presence section omitted from reports |
 | Dense embeddings | sentence-transformers | Hashed bag of words embeddings |
 

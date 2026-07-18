@@ -1,6 +1,11 @@
 -r requirements.txt
 
-# Kyutai bidirectional speech (STT + TTS, streaming)
+# Natural realtime TTS, preferred engine when installed (GPU or CPU).
+# Best results with the espeak-ng system package installed.
+kokoro>=0.9.4
+soundfile>=0.12
+
+# Kyutai bidirectional speech (streaming STT, plus fallback TTS)
 moshi>=0.2.6
 sphn>=0.1.4
 sentencepiece>=0.2.0

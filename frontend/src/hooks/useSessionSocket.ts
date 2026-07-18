@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioQueue } from "../audio/player";
 import type { BehaviorSummary, ChatMessage, Report } from "../types";
 
+export interface ServerSpeech {
+  stt_available: boolean;
+  tts_available: boolean;
+  tts_engine?: string | null;
+}
+
 export interface SessionSocketState {
   connected: boolean;
   messages: ChatMessage[];
@@ -11,7 +17,7 @@ export interface SessionSocketState {
   subtitle: string;
   secondsLeft: number | null;
   speaking: boolean;
-  serverSpeech: { available: boolean } | null;
+  serverSpeech: ServerSpeech | null;
   rolling: BehaviorSummary | null;
   report: Report | null;
   generatingReport: boolean;
@@ -30,6 +36,7 @@ export interface SessionSocketApi extends SessionSocketState {
 export function useSessionSocket(sessionId: string): SessionSocketApi {
   const wsRef = useRef<WebSocket | null>(null);
   const audioRef = useRef<AudioQueue | null>(null);
+  const speechRef = useRef<ServerSpeech | null>(null);
   const [state, setState] = useState<SessionSocketState>({
     connected: false,
     messages: [],
@@ -53,12 +60,27 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
     audioRef.current = audio;
     audio.onStateChange = (speaking) => setState((s) => ({ ...s, speaking }));
 
-    ws.onopen = () => setState((s) => ({ ...s, connected: true }));
-    ws.onclose = () => setState((s) => ({ ...s, connected: false }));
-    ws.onerror = () => setState((s) => ({ ...s, error: "Connection error" }));
+    let disposed = false;
+    ws.onopen = () => !disposed && setState((s) => ({ ...s, connected: true, error: null }));
+    ws.onclose = () => !disposed && setState((s) => ({ ...s, connected: false }));
+    ws.onerror = () => !disposed && setState((s) => ({ ...s, error: "Connection error" }));
 
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
+
+      // Side effects stay out of the state updater. StrictMode invokes
+      // updaters twice in dev, which made TTS speak every reply twice.
+      if (msg.type === "tts_audio") {
+        audio.enqueueWavBase64(msg.wav_b64);
+        return;
+      }
+      if (msg.type === "session_started") {
+        speechRef.current = msg.speech;
+      }
+      if (msg.type === "assistant_message" && speechRef.current && !speechRef.current.tts_available) {
+        audio.speakFallback(msg.spoken ?? msg.text);
+      }
+
       setState((s) => {
         switch (msg.type) {
           case "session_started":
@@ -76,9 +98,6 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
           case "assistant_message": {
             const messages = s.messages.filter((m) => !m.streaming);
             messages.push({ role: "assistant", text: msg.text });
-            if (s.serverSpeech && !s.serverSpeech.available) {
-              audio.speakFallback(msg.spoken ?? msg.text);
-            }
             return {
               ...s,
               messages,
@@ -86,9 +105,6 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
               secondsLeft: msg.seconds_left ?? s.secondsLeft,
             };
           }
-          case "tts_audio":
-            audio.enqueueWavBase64(msg.wav_b64);
-            return s;
           case "user_message":
             return { ...s, messages: [...s.messages, { role: "user", text: msg.text }], partial: "" };
           case "partial_transcript":
@@ -108,6 +124,8 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
     };
 
     return () => {
+      disposed = true;
+      ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;
       ws.close();
       audio.stop();
     };

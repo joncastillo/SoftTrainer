@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .llm.local_hf import transformers_available
 from .routes import documents, models, providers, sessions
-from .speech.kyutai import speech_status
+from .speech.engines import speech_status
 from .vision.behavior import vision_available
 
 app = FastAPI(title="SoftTrainer", version="0.1.0")

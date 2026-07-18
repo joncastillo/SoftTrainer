@@ -6,6 +6,7 @@ audio. The session is time bounded and ends with a generated report.
 """
 
 import asyncio
+import base64
 import re
 import time
 from typing import Optional
@@ -15,13 +16,14 @@ from fastapi import WebSocket
 from .. import storage
 from ..llm.registry import get_provider
 from ..rag import store as rag_store
-from ..speech import kyutai
+from ..speech import engines, kyutai
 from ..vision.behavior import BehaviorAnalyzer
 from .prompts import FORCE_END_NOTE, WRAPUP_NOTE, build_system_prompt
 from .report import generate_report
 
 WRAPUP_SECONDS = 120
 CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
 def strip_for_speech(text: str) -> str:
@@ -29,6 +31,90 @@ def strip_for_speech(text: str) -> str:
     text = CODE_BLOCK_RE.sub("", text)
     text = re.sub(r"[*_#`>|]", "", text)
     return re.sub(r"\n{2,}", "\n", text).strip()
+
+
+class SpeechStreamer:
+    """Speaks completed sentences while the LLM reply is still streaming.
+
+    Prose is separated from code fences on the fly, split into sentences
+    and fed to a single worker so audio chunks arrive in order with low
+    latency instead of one big blob after the whole reply.
+    """
+
+    def __init__(self, session: "LiveSession"):
+        self.session = session
+        self.enabled = engines.tts_installed()
+        self.raw = ""
+        self.buf = ""
+        self.in_code = False
+        self.queue: asyncio.Queue = asyncio.Queue()
+        self.task = asyncio.create_task(self._worker()) if self.enabled else None
+
+    async def _worker(self) -> None:
+        while True:
+            text = await self.queue.get()
+            if text is None:
+                return
+            try:
+                wav = await engines.synthesize_async(text)
+            except Exception:
+                continue
+            if wav:
+                await self.session.send(
+                    {"type": "tts_audio", "wav_b64": base64.b64encode(wav).decode()})
+
+    def _extract_prose(self, final: bool) -> str:
+        """Pull prose out of raw text, skipping code fences.
+
+        A short tail is held back on non final calls so a fence marker
+        split across two deltas is not misread as prose.
+        """
+        out = []
+        while True:
+            idx = self.raw.find("```")
+            if idx == -1:
+                keep = 0 if final else 2
+                cut = max(0, len(self.raw) - keep)
+                if not self.in_code:
+                    out.append(self.raw[:cut])
+                self.raw = self.raw[cut:]
+                return "".join(out)
+            if not self.in_code:
+                out.append(self.raw[:idx])
+            self.raw = self.raw[idx + 3:]
+            self.in_code = not self.in_code
+
+    def _enqueue(self, text: str) -> None:
+        text = re.sub(r"[*_#`>|]", "", text).strip()
+        if text:
+            self.queue.put_nowait(text)
+
+    async def feed(self, delta: str) -> None:
+        if not self.enabled:
+            return
+        self.raw += delta
+        self.buf += self._extract_prose(final=False)
+        parts = SENTENCE_SPLIT_RE.split(self.buf)
+        for sentence in parts[:-1]:
+            self._enqueue(sentence)
+        self.buf = parts[-1]
+
+    async def finish(self) -> None:
+        """Flush remaining prose and wait for all audio to be sent."""
+        if not self.enabled:
+            await self.session.send({"type": "tts_done"})
+            return
+        self.buf += self._extract_prose(final=True)
+        self._enqueue(self.buf)
+        self.buf = ""
+        self.queue.put_nowait(None)
+        if self.task:
+            await self.task
+        await self.session.send({"type": "tts_done"})
+
+    def cancel(self) -> None:
+        if self.task:
+            self.task.cancel()
 
 
 class LiveSession:
@@ -74,11 +160,12 @@ class LiveSession:
         await self.send({
             "type": "session_started",
             "seconds_left": self.seconds_left(),
-            "speech": kyutai.speech_status(),
+            "speech": engines.speech_status(),
         })
         opener = (
-            "System note: the session begins now. Greet the user in character "
-            "and get the scenario started."
+            "System note: the session begins now. Open in character with a warm, "
+            "natural introduction as described in your instructions, then lead "
+            "into your first question or opening move."
         )
         await self._assistant_turn(extra_note=opener)
 
@@ -97,30 +184,26 @@ class LiveSession:
             self.wrapup_sent = True
 
         full = ""
+        speech = SpeechStreamer(self)
         try:
             async for delta in self.provider.stream_chat(self._messages(note)):
                 full += delta
                 await self.send({"type": "assistant_delta", "text": delta})
+                await speech.feed(delta)
         except Exception as e:
+            speech.cancel()
             await self.send({"type": "error", "message": f"LLM error: {e}"})
             return
 
         self.history.append({"role": "assistant", "content": full})
         storage.append_transcript(self.id, {"role": "assistant", "text": full})
-        spoken = strip_for_speech(full)
         await self.send({
             "type": "assistant_message",
             "text": full,
-            "spoken": spoken,
+            "spoken": strip_for_speech(full),
             "seconds_left": self.seconds_left(),
         })
-
-        if spoken:
-            wav = await kyutai.synthesize_async(spoken)
-            if wav is not None:
-                import base64
-                await self.send({"type": "tts_audio", "wav_b64": base64.b64encode(wav).decode()})
-            await self.send({"type": "tts_done"})
+        await speech.finish()
 
     async def handle_user_text(self, text: str) -> None:
         """Process a completed user utterance and produce the reply."""

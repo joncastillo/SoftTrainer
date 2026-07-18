@@ -6,7 +6,6 @@ the rest of the app works without torch installed. The frontend falls
 back to browser speech APIs when these report unavailable.
 """
 
-import asyncio
 import logging
 import struct
 import threading
@@ -182,19 +181,6 @@ def get_tts() -> Optional[KyutaiTTS]:
     return _tts
 
 
-async def synthesize_async(text: str) -> Optional[bytes]:
-    """Run TTS in a worker thread so the event loop stays responsive."""
-    tts = get_tts()
-    if tts is None:
-        return None
-    return await asyncio.get_running_loop().run_in_executor(None, tts.synthesize, text)
-
-
-def speech_status() -> dict:
-    return {
-        "available": moshi_available() and not _load_failed,
-        "stt_loaded": _stt is not None,
-        "tts_loaded": _tts is not None,
-        "stt_model": STT_REPO,
-        "sample_rate": SAMPLE_RATE,
-    }
+def usable() -> bool:
+    """True while the models are importable and have not failed to load."""
+    return moshi_available() and not _load_failed

@@ -55,7 +55,7 @@ export function SessionPage() {
       stopMic();
       return;
     }
-    if (socket.serverSpeech?.available) {
+    if (socket.serverSpeech?.stt_available) {
       micRef.current = await startMic(socket.sendAudio, socket.endUtterance);
     } else {
       // No Kyutai models on the server, use the browser recognizer.

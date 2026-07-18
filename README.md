@@ -16,6 +16,10 @@ feedback and a written assessment at the end.
   are the final fallback when neither is installed.
 - Camera behavior assessment with MediaPipe: eye contact, gaze, blink rate,
   head stability, smile, and a rolling confidence score.
+- Live behavior coaching: short, actionable on screen tips appear during the
+  session (look at the camera more, keep your head steadier, relax your
+  expression, center yourself in frame), plus the occasional bit of praise.
+  Rule based and fully local, with cooldowns so it nudges rather than nags.
 - Sessions are bounded like real meetings. The trainer wraps up naturally
   when time runs low and closes when it runs out.
 - Final report: overall score, per dimension scores, strengths, concrete
@@ -76,6 +80,10 @@ is needed either way.
   (Settings, or "Manage models" on the start page), download a
   recommended model and load it. Ollama and cloud providers can be
   activated in Settings instead.
+- The active self hosted model is reloaded automatically when the backend
+  starts, so a session works immediately after a restart. (The loaded model
+  cache lives in memory, so without this the first session after a restart
+  would have no replies until you reloaded the model by hand.)
 
 ## Optional dependencies
 
@@ -100,6 +108,19 @@ also shows the active voice ("voice: kokoro" means natural TTS is on,
 
 - Use Python 3.10 to 3.12. mediapipe and kokoro do not always ship
   wheels for the newest Python on Windows.
+- **mediapipe is pinned to 0.10.14.** Later builds (0.10.35 and up) ship
+  only the Tasks API and drop the legacy `solutions.face_mesh` used for
+  camera analysis, which surfaces as "module mediapipe has no attribute
+  solutions". If you upgrade it, camera feedback stops working.
+- **No C/C++ compiler needed.** The Kyutai/moshi speech models and Kokoro
+  call `torch.compile` at inference. On a machine without MSVC (`cl.exe`)
+  that would raise "Compiler: cl is not found" and kill speech to text, so
+  the backend forces eager execution (`TORCHDYNAMO_DISABLE`, set in
+  `backend/app/config.py`). Speech runs a little slower but needs no
+  compiler. Install Visual Studio Build Tools only if you want compiled
+  kernels.
+- Give the models room: the speech and self hosted LLM weights are several
+  GB. A nearly full disk fails model downloads and caches in confusing ways.
 - Kokoro needs no system espeak install, its phonemizer bundles one.
   After `pip install -r requirements-full.txt`, restart the backend and
   check `/api/health`: `speech.tts_engine` should say `kokoro`. If the

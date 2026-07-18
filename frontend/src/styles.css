@@ -139,6 +139,43 @@ button.chip {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+.bubble.event {
+  align-self: center; max-width: 80%;
+  background: #2a2330; border: 1px dashed #4a3a55;
+  color: var(--muted); font-size: 13px; font-style: italic;
+}
+.event-label {
+  display: block; font-size: 11px; font-weight: 600; font-style: normal;
+  text-transform: uppercase; letter-spacing: 0.06em; color: #b48ead;
+  margin-bottom: 2px;
+}
+.disclaimer { margin-top: 24px; font-style: italic; }
+
+.grounding-overlay {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; min-height: 60vh; text-align: center;
+}
+.breath-circle {
+  width: 120px; height: 120px; border-radius: 50%;
+  background: radial-gradient(circle, #2b4a7a 0%, #1c2c48 70%);
+  animation: breathe 8s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% { transform: scale(0.7); }
+  50% { transform: scale(1.15); }
+}
+
+.reflection-card {
+  background: var(--panel); border: 1px solid #262b35; border-radius: 10px;
+  padding: 16px; margin: 16px 0; max-width: 640px;
+}
+.reflection-card label { margin-bottom: 12px; }
+.reflection-saved { margin: 16px 0; }
+.ladder-suggestion {
+  background: #1d3a2c; color: var(--ok); border-radius: 8px;
+  padding: 10px 14px; margin: 12px 0; font-size: 14px;
+}
+
 .keypoint-input { display: block; width: 100%; max-width: 480px; margin-bottom: 8px; }
 .keypoint-list {
   list-style: none; padding: 8px 10px; margin: 0;

@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { startMic, type MicHandle } from "../audio/mic";
 import { CameraPanel } from "../components/CameraPanel";
+import { ReflectionCard } from "../components/ReflectionCard";
 import { Markdown } from "../components/Markdown";
 import { ReportView } from "../components/ReportView";
 import { useSessionSocket } from "../hooks/useSessionSocket";
@@ -15,10 +16,33 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+const GROUNDING_SECONDS = 30;
+
+function GroundingOverlay({ onDone }: { onDone: () => void }) {
+  const [left, setLeft] = useState(GROUNDING_SECONDS);
+  useEffect(() => {
+    const t = setInterval(() => setLeft((s) => s - 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (left <= 0) onDone();
+  }, [left, onDone]);
+  return (
+    <div className="grounding-overlay">
+      <div className="breath-circle" />
+      <p>Breathe in as the circle grows, out as it shrinks.</p>
+      <p className="hint">Starting in {Math.max(0, left)}s</p>
+      <button className="link" onClick={onDone}>Skip</button>
+    </div>
+  );
+}
+
 export function SessionPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const socket = useSessionSocket(id);
+  // "unknown" until meta loads, then either the breathing step or straight in.
+  const [grounding, setGrounding] = useState<"unknown" | "active" | "done">("unknown");
+  const socket = useSessionSocket(id, grounding === "done");
   const [subtitlesOn, setSubtitlesOn] = useState(true);
   const [micOn, setMicOn] = useState(false);
   const [micError, setMicError] = useState("");
@@ -32,7 +56,13 @@ export function SessionPage() {
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.getSession(id).then((s) => setSubtitlesOn(s.meta.subtitles ?? true)).catch(() => {});
+    api
+      .getSession(id)
+      .then((s) => {
+        setSubtitlesOn(s.meta.subtitles ?? true);
+        setGrounding(s.meta.grounding && s.meta.status === "created" ? "active" : "done");
+      })
+      .catch(() => setGrounding("done"));
   }, [id]);
 
   useEffect(() => {
@@ -173,7 +203,16 @@ export function SessionPage() {
     return (
       <div className="page">
         <ReportView report={socket.report} />
+        <ReflectionCard sessionId={id} />
         <button className="primary" onClick={() => navigate("/")}>New session</button>
+      </div>
+    );
+  }
+
+  if (grounding !== "done") {
+    return (
+      <div className="page session">
+        {grounding === "active" && <GroundingOverlay onDone={() => setGrounding("done")} />}
       </div>
     );
   }
@@ -214,6 +253,11 @@ export function SessionPage() {
         <div className="conversation" ref={logRef}>
           {socket.messages.map((m, i) => (
             <div key={i} className={`bubble ${m.role}`}>
+              {m.role === "event" && (
+                <span className="event-label">
+                  {m.kind === "heckle" ? "Audience" : "Distraction"}
+                </span>
+              )}
               {m.role === "assistant" ? <Markdown text={m.text} /> : m.text}
             </div>
           ))}

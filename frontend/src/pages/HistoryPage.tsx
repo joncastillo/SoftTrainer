@@ -12,6 +12,7 @@ export function HistoryPage() {
   const [detail, setDetail] = useState<{
     transcript: TranscriptEntry[];
     report: Report | null;
+    reflection: { question: string; answer: string }[] | null;
   } | null>(null);
   const [tab, setTab] = useState<"report" | "transcript">("report");
 
@@ -23,7 +24,11 @@ export function HistoryPage() {
     if (!selected) return;
     setDetail(null);
     api.getSession(selected).then((d) =>
-      setDetail({ transcript: d.transcript, report: d.report }),
+      setDetail({
+        transcript: d.transcript,
+        report: d.report,
+        reflection: d.meta?.reflection ?? null,
+      }),
     );
   }, [selected]);
 
@@ -63,12 +68,27 @@ export function HistoryPage() {
                   Transcript
                 </button>
               </div>
-              {tab === "report" &&
-                (detail.report ? (
-                  <ReportView report={detail.report} />
-                ) : (
-                  <p className="hint">No report was generated for this session.</p>
-                ))}
+              {tab === "report" && (
+                <>
+                  {detail.report ? (
+                    <ReportView report={detail.report} />
+                  ) : (
+                    <p className="hint">No report was generated for this session.</p>
+                  )}
+                  {detail.reflection && detail.reflection.length > 0 && (
+                    <section className="reflection-card">
+                      <h3>Your reflection</h3>
+                      {detail.reflection.map((r) => (
+                        <p key={r.question}>
+                          <span className="hint">{r.question}</span>
+                          <br />
+                          {r.answer}
+                        </p>
+                      ))}
+                    </section>
+                  )}
+                </>
+              )}
               {tab === "transcript" && (
                 <div className="conversation static">
                   {detail.transcript.map((t, i) => (

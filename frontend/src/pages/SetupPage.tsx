@@ -21,6 +21,8 @@ export function SetupPage() {
   const [minutes, setMinutes] = useState(15);
   const [difficulty, setDifficulty] = useState("medium");
   const [subtitles, setSubtitles] = useState(true);
+  const [pressure, setPressure] = useState("off");
+  const [grounding, setGrounding] = useState(false);
   const [keyPoints, setKeyPoints] = useState<string[]>(["", "", ""]);
   const [documents, setDocuments] = useState<DocumentMeta[]>([]);
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
@@ -65,6 +67,8 @@ export function SetupPage() {
         document_ids: selectedDocs,
         difficulty,
         key_points: keyPoints.map((p) => p.trim()).filter(Boolean),
+        pressure,
+        grounding,
       });
       navigate(`/session/${id}`);
     } catch (e: any) {
@@ -122,9 +126,22 @@ export function SetupPage() {
             <option value="hard">Hard</option>
           </select>
         </label>
+        <label title="Occasional audience heckles and room distractions to practise composure">
+          Pressure
+          <select value={pressure} onChange={(e) => setPressure(e.target.value)}>
+            <option value="off">Off</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
         <label className="checkbox">
           <input type="checkbox" checked={subtitles} onChange={(e) => setSubtitles(e.target.checked)} />
           Subtitles
+        </label>
+        <label className="checkbox" title="A 30-second guided breath before the trainer starts">
+          <input type="checkbox" checked={grounding} onChange={(e) => setGrounding(e.target.checked)} />
+          Grounding breath
         </label>
       </div>
 

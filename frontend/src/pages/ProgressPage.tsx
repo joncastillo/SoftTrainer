@@ -126,11 +126,21 @@ function StatTile({ metric, sessions }: { metric: MetricDef; sessions: ProgressE
   );
 }
 
+interface LadderSuggestion {
+  text: string;
+  difficulty: string;
+  pressure: string;
+}
+
 export function ProgressPage() {
   const [sessions, setSessions] = useState<ProgressEntry[] | null>(null);
+  const [suggestion, setSuggestion] = useState<LadderSuggestion | null>(null);
 
   useEffect(() => {
-    api.progress().then((d) => setSessions(d.sessions));
+    api.progress().then((d) => {
+      setSessions(d.sessions);
+      setSuggestion(d.suggestion ?? null);
+    });
   }, []);
 
   if (sessions === null) return <div className="page"><p className="hint">Loading...</p></div>;
@@ -150,6 +160,8 @@ export function ProgressPage() {
         Trends across your {sessions.length} completed session{sessions.length === 1 ? "" : "s"},
         oldest to newest.
       </p>
+
+      {suggestion && <div className="ladder-suggestion">{suggestion.text}</div>}
 
       <div className="stat-grid">
         {METRICS.map((m) => (

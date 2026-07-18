@@ -37,7 +37,7 @@ export interface SessionSocketApi extends SessionSocketState {
   endSession: () => void;
 }
 
-export function useSessionSocket(sessionId: string): SessionSocketApi {
+export function useSessionSocket(sessionId: string, enabled: boolean = true): SessionSocketApi {
   const wsRef = useRef<WebSocket | null>(null);
   const audioRef = useRef<AudioQueue | null>(null);
   const speechRef = useRef<ServerSpeech | null>(null);
@@ -59,6 +59,7 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
   });
 
   useEffect(() => {
+    if (!enabled) return;
     let ws: WebSocket | null = null;
     let disposed = false;
     const audio = new AudioQueue();
@@ -131,6 +132,11 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
           }
           case "user_message":
             return { ...s, messages: [...s.messages, { role: "user", text: msg.text }], partial: "" };
+          case "pressure_event":
+            return {
+              ...s,
+              messages: [...s.messages, { role: "event", text: msg.text, kind: msg.kind }],
+            };
           case "partial_transcript":
             return { ...s, partial: msg.text };
           case "metrics":
@@ -165,7 +171,7 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
       }
       audio.stop();
     };
-  }, [sessionId]);
+  }, [sessionId, enabled]);
 
   const send = useCallback((payload: object) => {
     const ws = wsRef.current;

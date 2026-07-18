@@ -80,6 +80,30 @@ export function ReportView({ report }: { report: Report }) {
         </section>
       )}
 
+      {report.composure?.available && (
+        <section>
+          <h3>Composure under pressure</h3>
+          <p className="hint">
+            {report.composure.events} heckle/distraction event
+            {report.composure.events === 1 ? "" : "s"} at {report.composure.level} pressure
+          </p>
+          <ul>
+            {report.composure.filler_rate_under_pressure_pct != null && (
+              <li>
+                Filler rate: {report.composure.filler_rate_baseline_pct}% baseline →{" "}
+                {report.composure.filler_rate_under_pressure_pct}% under pressure
+              </li>
+            )}
+            {report.composure.eye_contact_under_pressure_pct != null && (
+              <li>
+                Eye contact: {report.composure.eye_contact_baseline_pct}% baseline →{" "}
+                {report.composure.eye_contact_under_pressure_pct}% under pressure
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
+
       {report.strengths?.length > 0 && (
         <section>
           <h3>Strengths</h3>
@@ -105,6 +129,11 @@ export function ReportView({ report }: { report: Report }) {
           ))}
         </section>
       )}
+
+      <p className="hint disclaimer">
+        SoftTrainer is a practice tool, not a medical or therapeutic device. Scores
+        are rough coaching signals — trust your own sense of progress over any number.
+      </p>
     </div>
   );
 }

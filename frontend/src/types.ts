@@ -85,6 +85,7 @@ export interface Report {
   behavior: BehaviorSummary;
   delivery?: DeliverySummary;
   key_points?: KeyPointsSummary;
+  composure?: ComposureSummary;
   scenario: string;
 }
 
@@ -114,9 +115,20 @@ export interface LocalModel {
 }
 
 export interface ChatMessage {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "event";
   text: string;
   streaming?: boolean;
+  kind?: string;
+}
+
+export interface ComposureSummary {
+  available?: boolean;
+  events?: number;
+  level?: string;
+  filler_rate_baseline_pct?: number;
+  filler_rate_under_pressure_pct?: number;
+  eye_contact_baseline_pct?: number;
+  eye_contact_under_pressure_pct?: number;
 }
 
 export interface CoachTip {

@@ -30,6 +30,8 @@ export const api = {
   createSession: (body: unknown) => request<{ id: string }>("/api/sessions", json(body)),
   listSessions: () => request<any[]>("/api/sessions"),
   progress: () => request<any>("/api/progress"),
+  saveReflection: (id: string, answers: unknown[]) =>
+    request<any>(`/api/sessions/${id}/reflection`, json({ answers })),
   getSession: (id: string) => request<any>(`/api/sessions/${id}`),
 
   uploadDocument: (file: File) => {

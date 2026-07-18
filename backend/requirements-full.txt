@@ -13,6 +13,8 @@ sentencepiece>=0.2.0
 # Better RAG embeddings (falls back to hashed embeddings without this)
 sentence-transformers>=3.0
 
-# Camera behavior analysis (eye gaze, head pose, expressions)
-mediapipe>=0.10.14
+# Camera behavior analysis (eye gaze, head pose, expressions).
+# Pinned: mediapipe dropped the legacy solutions.face_mesh API in later
+# builds (e.g. 0.10.35 ships only the Tasks API), which breaks FaceMesh.
+mediapipe==0.10.14
 opencv-python-headless>=4.9

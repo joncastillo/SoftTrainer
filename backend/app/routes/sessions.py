@@ -82,3 +82,8 @@ async def session_socket(ws: WebSocket, session_id: str) -> None:
             await ws.send_json({"type": "error", "message": str(e)})
         except Exception:
             pass
+    # Note: the shared STT instance is deliberately NOT stopped here on
+    # teardown. Doing so races with the next session (this session's cleanup
+    # can run after the next one has already re-entered streaming, disabling
+    # it). Instead KyutaiSTT.start() resets any leftover state at the start of
+    # each session, which is race free because it runs on the consumer side.

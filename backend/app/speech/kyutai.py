@@ -56,6 +56,13 @@ class KyutaiSTT:
         import torch
         from moshi.models import LMGen, loaders
 
+        # Defence in depth against a missing compiler: if torch.compile is
+        # still reached, fall back to eager rather than aborting the session.
+        try:
+            torch._dynamo.config.suppress_errors = True
+        except Exception:
+            pass
+
         self.torch = torch
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         info = loaders.CheckpointInfo.from_hf_repo(STT_REPO)
@@ -69,6 +76,12 @@ class KyutaiSTT:
         self._lm_ctx = None
 
     def start(self) -> None:
+        # This instance is shared across sessions. A prior session that ended
+        # without a clean stop (a dropped WebSocket) leaves the mimi and lm
+        # modules mid stream, and moshi then asserts "already streaming" here,
+        # which kills speech to text for every session until a restart. Reset
+        # any leftover streaming state first so each session starts clean.
+        self.stop()
         self._mimi_ctx = self.mimi.streaming(1)
         self._lm_ctx = self.lm_gen.streaming(1)
         self._mimi_ctx.__enter__()
@@ -77,7 +90,10 @@ class KyutaiSTT:
     def stop(self) -> None:
         for ctx in (self._lm_ctx, self._mimi_ctx):
             if ctx is not None:
-                ctx.__exit__(None, None, None)
+                try:
+                    ctx.__exit__(None, None, None)
+                except Exception:
+                    logger.exception("Error resetting Kyutai STT streaming state")
         self._mimi_ctx = self._lm_ctx = None
         self._buffer = np.zeros(0, dtype=np.float32)
 

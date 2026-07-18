@@ -23,6 +23,7 @@ export interface SessionSocketState {
   rolling: BehaviorSummary | null;
   coachTip: CoachTip | null;
   keyPoints: KeyPointState[];
+  pressureEvent: { id: number; kind: string } | null;
   report: Report | null;
   generatingReport: boolean;
   ended: boolean;
@@ -35,6 +36,7 @@ export interface SessionSocketApi extends SessionSocketState {
   endUtterance: () => void;
   sendFrame: (jpegB64: string) => void;
   endSession: () => void;
+  getAudioLevel: () => number;
 }
 
 export function useSessionSocket(sessionId: string, enabled: boolean = true): SessionSocketApi {
@@ -52,6 +54,7 @@ export function useSessionSocket(sessionId: string, enabled: boolean = true): Se
     rolling: null,
     coachTip: null,
     keyPoints: [],
+    pressureEvent: null,
     report: null,
     generatingReport: false,
     ended: false,
@@ -136,6 +139,7 @@ export function useSessionSocket(sessionId: string, enabled: boolean = true): Se
             return {
               ...s,
               messages: [...s.messages, { role: "event", text: msg.text, kind: msg.kind }],
+              pressureEvent: { id: (s.pressureEvent?.id ?? 0) + 1, kind: msg.kind },
             };
           case "partial_transcript":
             return { ...s, partial: msg.text };
@@ -187,5 +191,6 @@ export function useSessionSocket(sessionId: string, enabled: boolean = true): Se
     endUtterance: useCallback(() => send({ type: "utterance_end" }), [send]),
     sendFrame: useCallback((jpeg_b64: string) => send({ type: "frame", jpeg_b64 }), [send]),
     endSession: useCallback(() => send({ type: "end" }), [send]),
+    getAudioLevel: useCallback(() => audioRef.current?.getLevel() ?? 0, []),
   };
 }

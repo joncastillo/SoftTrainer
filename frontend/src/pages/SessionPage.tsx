@@ -4,8 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { startMic, type MicHandle } from "../audio/mic";
+import { Ambience } from "../audio/ambience";
 import { CameraPanel } from "../components/CameraPanel";
+import { CrowdStrip } from "../components/CrowdStrip";
 import { ReflectionCard } from "../components/ReflectionCard";
+import { TrainerAvatar } from "../components/TrainerAvatar";
 import { Markdown } from "../components/Markdown";
 import { ReportView } from "../components/ReportView";
 import { useSessionSocket } from "../hooks/useSessionSocket";
@@ -44,6 +47,9 @@ export function SessionPage() {
   const [grounding, setGrounding] = useState<"unknown" | "active" | "done">("unknown");
   const socket = useSessionSocket(id, grounding === "done");
   const [subtitlesOn, setSubtitlesOn] = useState(true);
+  const [pressureLevel, setPressureLevel] = useState("off");
+  const [ambienceOn, setAmbienceOn] = useState(true);
+  const ambienceRef = useRef<Ambience | null>(null);
   const [micOn, setMicOn] = useState(false);
   const [micError, setMicError] = useState("");
   const [browserPartial, setBrowserPartial] = useState("");
@@ -60,10 +66,27 @@ export function SessionPage() {
       .getSession(id)
       .then((s) => {
         setSubtitlesOn(s.meta.subtitles ?? true);
+        setPressureLevel(s.meta.pressure ?? "off");
         setGrounding(s.meta.grounding && s.meta.status === "created" ? "active" : "done");
       })
       .catch(() => setGrounding("done"));
   }, [id]);
+
+  // Room ambience runs for the whole live portion of a pressure session.
+  useEffect(() => {
+    if (grounding !== "done" || pressureLevel === "off" || socket.ended) return;
+    const ambience = new Ambience();
+    ambienceRef.current = ambience;
+    ambience.start(pressureLevel);
+    return () => {
+      ambienceRef.current = null;
+      ambience.stop();
+    };
+  }, [grounding, pressureLevel, socket.ended]);
+
+  useEffect(() => {
+    ambienceRef.current?.setMuted(!ambienceOn);
+  }, [ambienceOn]);
 
   useEffect(() => {
     if (socket.secondsLeft == null) return;
@@ -243,6 +266,16 @@ export function SessionPage() {
             />
             Subtitles
           </label>
+          {pressureLevel !== "off" && (
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={ambienceOn}
+                onChange={(e) => setAmbienceOn(e.target.checked)}
+              />
+              Ambience
+            </label>
+          )}
           <button className="danger" onClick={socket.endSession} disabled={socket.ended}>
             End session
           </button>
@@ -266,6 +299,8 @@ export function SessionPage() {
         </div>
 
         <aside className="side-panel">
+          <TrainerAvatar getLevel={socket.getAudioLevel} speaking={socket.speaking} />
+          {pressureLevel !== "off" && <CrowdStrip event={socket.pressureEvent} />}
           <CameraPanel onFrame={socket.sendFrame} rolling={socket.rolling} tip={socket.coachTip} />
           {socket.keyPoints.length > 0 && (
             <ul className="keypoint-list" aria-label="Key points">

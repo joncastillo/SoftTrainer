@@ -8,6 +8,7 @@ export interface ServerSpeech {
   stt_available: boolean;
   tts_available: boolean;
   tts_engine?: string | null;
+  tts_detail?: string;
 }
 
 export interface SessionSocketState {

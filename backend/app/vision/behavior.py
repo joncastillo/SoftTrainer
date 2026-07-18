@@ -6,9 +6,12 @@ frame when mediapipe or opencv are not installed.
 """
 
 import base64
+import logging
 from typing import Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 LEFT_EYE = [33, 160, 158, 133, 153, 144]
 RIGHT_EYE = [362, 385, 387, 263, 373, 380]
@@ -18,9 +21,12 @@ MOUTH = [61, 291, 13, 14]
 
 _face_mesh = None
 _cv2 = None
+_vision_failed = False
 
 
 def vision_available() -> bool:
+    if _vision_failed:
+        return False
     try:
         import cv2  # noqa: F401
         import mediapipe  # noqa: F401
@@ -29,16 +35,33 @@ def vision_available() -> bool:
         return False
 
 
+def _face_mesh_module():
+    """Locate the FaceMesh solution across mediapipe packaging variants.
+
+    Some builds (seen on Windows) do not expose the lazy mp.solutions
+    attribute, but the module is still importable by its full path.
+    """
+    import mediapipe as mp
+    try:
+        return mp.solutions.face_mesh
+    except AttributeError:
+        from mediapipe.python.solutions import face_mesh
+        return face_mesh
+
+
 def _get_mesh():
-    global _face_mesh, _cv2
-    if _face_mesh is None:
-        import cv2
-        import mediapipe as mp
-        _cv2 = cv2
-        _face_mesh = mp.solutions.face_mesh.FaceMesh(
-            max_num_faces=1, refine_landmarks=True,
-            min_detection_confidence=0.5, min_tracking_confidence=0.5,
-        )
+    global _face_mesh, _cv2, _vision_failed
+    if _face_mesh is None and not _vision_failed:
+        try:
+            import cv2
+            _cv2 = cv2
+            _face_mesh = _face_mesh_module().FaceMesh(
+                max_num_faces=1, refine_landmarks=True,
+                min_detection_confidence=0.5, min_tracking_confidence=0.5,
+            )
+        except Exception:
+            logger.exception("Face analysis unavailable, continuing without camera metrics")
+            _vision_failed = True
     return _face_mesh
 
 
@@ -73,6 +96,8 @@ class BehaviorAnalyzer:
         if not vision_available():
             return None
         mesh = _get_mesh()
+        if mesh is None:
+            return None
         cv2 = _cv2
         raw = base64.b64decode(jpeg_b64.split(",")[-1])
         img = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)

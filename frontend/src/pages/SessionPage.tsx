@@ -21,10 +21,14 @@ export function SessionPage() {
   const socket = useSessionSocket(id);
   const [subtitlesOn, setSubtitlesOn] = useState(true);
   const [micOn, setMicOn] = useState(false);
+  const [micError, setMicError] = useState("");
+  const [browserPartial, setBrowserPartial] = useState("");
   const [draft, setDraft] = useState("");
   const [clock, setClock] = useState<number | null>(null);
   const micRef = useRef<MicHandle | null>(null);
   const recognitionRef = useRef<any>(null);
+  const listeningRef = useRef(false);
+  const trainerSpeakingRef = useRef(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,45 +47,120 @@ export function SessionPage() {
   }, [socket.messages, socket.partial]);
 
   const stopMic = useCallback(() => {
+    listeningRef.current = false;
     micRef.current?.stop();
     micRef.current = null;
-    recognitionRef.current?.stop();
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      /* already stopped */
+    }
     recognitionRef.current = null;
+    setBrowserPartial("");
     setMicOn(false);
   }, []);
 
+  const startBrowserRecognition = useCallback((): boolean => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      setMicError(
+        "This browser has no speech recognition. Use Chrome or Edge, install the " +
+          "server speech models, or type your replies below.",
+      );
+      return false;
+    }
+    const rec = new SR();
+    rec.lang = navigator.language || "en-US";
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = (e: any) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const result = e.results[i];
+        if (result.isFinal) {
+          const text = result[0].transcript.trim();
+          if (text) socket.sendText(text);
+          setBrowserPartial("");
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      if (interim) setBrowserPartial(interim);
+    };
+    rec.onerror = (e: any) => {
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      const hints: Record<string, string> = {
+        "not-allowed": "Microphone permission was denied. Allow it in the address bar and try again.",
+        network: "The browser recognizer needs an internet connection.",
+        "audio-capture": "No microphone was found. Check your input device.",
+      };
+      setMicError(hints[e.error] ?? `Microphone error: ${e.error}`);
+    };
+    // Chrome stops listening after pauses, restart while the mic is on
+    // but stay quiet while the trainer is speaking to avoid echo.
+    rec.onend = () => {
+      setBrowserPartial("");
+      if (listeningRef.current && !trainerSpeakingRef.current) {
+        try {
+          rec.start();
+        } catch {
+          /* restarting too fast, the next onend retries */
+        }
+      }
+    };
+    recognitionRef.current = rec;
+    try {
+      rec.start();
+    } catch {
+      /* already started */
+    }
+    return true;
+  }, [socket]);
+
   const toggleMic = useCallback(async () => {
+    setMicError("");
     if (micOn) {
       stopMic();
       return;
     }
     if (socket.serverSpeech?.stt_available) {
-      micRef.current = await startMic(socket.sendAudio, socket.endUtterance);
-    } else {
-      // No Kyutai models on the server, use the browser recognizer.
-      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SR) {
-        alert("Speech input needs Kyutai models on the server or a Chromium based browser.");
+      try {
+        micRef.current = await startMic(socket.sendAudio, socket.endUtterance);
+      } catch {
+        setMicError("Microphone access was denied or no input device was found.");
         return;
       }
-      const rec = new SR();
-      rec.continuous = true;
-      rec.interimResults = false;
-      rec.onresult = (e: any) => {
-        const text = e.results[e.results.length - 1][0].transcript;
-        if (text.trim()) socket.sendText(text.trim());
-      };
-      rec.start();
-      recognitionRef.current = rec;
+    } else if (!startBrowserRecognition()) {
+      return;
     }
+    listeningRef.current = true;
     setMicOn(true);
-  }, [micOn, socket, stopMic]);
+  }, [micOn, socket, stopMic, startBrowserRecognition]);
 
   useEffect(() => stopMic, [stopMic]);
 
   useEffect(() => {
     if (socket.ended) stopMic();
   }, [socket.ended, stopMic]);
+
+  useEffect(() => {
+    trainerSpeakingRef.current = socket.speaking;
+    const rec = recognitionRef.current;
+    if (!rec || !listeningRef.current) return;
+    if (socket.speaking) {
+      try {
+        rec.stop();
+      } catch {
+        /* already stopped */
+      }
+    } else {
+      try {
+        rec.start();
+      } catch {
+        /* already running */
+      }
+    }
+  }, [socket.speaking]);
 
   const submitDraft = () => {
     if (draft.trim()) {
@@ -108,7 +187,13 @@ export function SessionPage() {
         <div className="session-status">
           {!socket.connected && <span className="error">disconnected</span>}
           {socket.speaking && <span className="speaking">trainer speaking</span>}
+          {micOn && !socket.speaking && <span className="speaking">listening</span>}
           {socket.generatingReport && <span>preparing your report...</span>}
+          {socket.serverSpeech && (
+            <span className="tag" title={socket.serverSpeech.tts_detail ?? ""}>
+              voice: {socket.serverSpeech.tts_engine ?? "browser"}
+            </span>
+          )}
         </div>
         <div className="session-actions">
           <label className="checkbox">
@@ -133,6 +218,7 @@ export function SessionPage() {
             </div>
           ))}
           {socket.partial && <div className="bubble user partial">{socket.partial}</div>}
+          {browserPartial && <div className="bubble user partial">{browserPartial}</div>}
         </div>
 
         <aside className="side-panel">
@@ -141,6 +227,7 @@ export function SessionPage() {
             <button className={micOn ? "danger" : "primary"} onClick={toggleMic} disabled={socket.ended}>
               {micOn ? "Mute microphone" : "Enable microphone"}
             </button>
+            {micError && <p className="error">{micError}</p>}
           </div>
           <div className="text-input">
             <textarea

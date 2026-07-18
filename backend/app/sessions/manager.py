@@ -243,7 +243,10 @@ class LiveSession:
         if self.ended:
             return
         loop = asyncio.get_running_loop()
-        sample = await loop.run_in_executor(None, self.behavior.analyze_frame, jpeg_b64)
+        try:
+            sample = await loop.run_in_executor(None, self.behavior.analyze_frame, jpeg_b64)
+        except Exception:
+            return
         if sample is None:
             return
         self._frame_count += 1

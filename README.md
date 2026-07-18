@@ -86,4 +86,20 @@ The app runs with the core requirements alone and degrades gracefully:
 Self hosted inference (torch plus transformers) is part of the core
 requirements since it is the default provider.
 
-`GET /api/health` reports which capabilities are active on your install.
+`GET /api/health` reports which capabilities are active on your install,
+including which TTS engine is in use and why. The live session header
+also shows the active voice ("voice: kokoro" means natural TTS is on,
+"voice: browser" means the fallback voice is speaking).
+
+## Windows notes
+
+- Use Python 3.10 to 3.12. mediapipe and kokoro do not always ship
+  wheels for the newest Python on Windows.
+- Kokoro needs no system espeak install, its phonemizer bundles one.
+  After `pip install -r requirements-full.txt`, restart the backend and
+  check `/api/health`: `speech.tts_engine` should say `kokoro`. If the
+  voice still sounds robotic, the header badge will say `voice: browser`
+  and the health endpoint explains what is missing.
+- Without the server speech models, microphone input uses the browser
+  recognizer, which works in Chrome and Edge and needs an internet
+  connection. Firefox has no browser recognizer, type replies instead.

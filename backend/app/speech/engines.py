@@ -23,13 +23,16 @@ _lock = threading.Lock()
 _engine = None
 _engine_name: Optional[str] = None
 _kokoro_failed = False
+_kokoro_import_error: Optional[str] = None
 
 
 def kokoro_installed() -> bool:
+    global _kokoro_import_error
     try:
         import kokoro  # noqa: F401
         return True
-    except ImportError:
+    except ImportError as e:
+        _kokoro_import_error = str(e)
         return False
 
 
@@ -108,11 +111,26 @@ async def synthesize_async(text: str) -> Optional[bytes]:
     return await loop.run_in_executor(None, run)
 
 
+def _tts_detail() -> str:
+    """Human readable line explaining which voice is in use and why."""
+    if _engine_name == "kokoro":
+        return "Kokoro voice active"
+    if _engine_name == "kyutai":
+        return "Kyutai voice active"
+    if _kokoro_failed:
+        return "Kokoro installed but failed to load, check the server log"
+    if not kokoro_installed():
+        base = f"Kokoro not installed ({_kokoro_import_error}). pip install -r requirements-full.txt"
+        return base + (", Kyutai available" if kyutai.usable() else ". Using the browser voice")
+    return "Kokoro ready, loads on the first reply"
+
+
 def speech_status() -> dict:
     return {
         "stt_available": kyutai.usable(),
         "tts_available": tts_installed(),
         "tts_engine": _engine_name or preferred_engine_name(),
+        "tts_detail": _tts_detail(),
         "stt_model": kyutai.STT_REPO,
         "sample_rate": kyutai.SAMPLE_RATE,
     }

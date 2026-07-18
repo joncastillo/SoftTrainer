@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+
+# App data (conversations, models, uploads are stored here at runtime)
+data/
+
+# Misc
+.DS_Store
+*.log
+.env

@@ -33,6 +33,40 @@ def list_sessions() -> list[dict]:
     return storage.list_sessions()
 
 
+@router.get("/api/progress")
+def progress() -> dict:
+    """Per-session metric time series for the longitudinal progress view."""
+    entries = []
+    for meta in storage.list_sessions():
+        behavior = meta.get("behavior_summary") or {}
+        delivery = meta.get("delivery_summary") or {}
+        keypoints = meta.get("keypoints_summary") or {}
+        report = storage.read_report(meta["id"]) if meta.get("has_report") else None
+        key_points_pct = None
+        if keypoints.get("available") and keypoints.get("total"):
+            key_points_pct = round(100.0 * keypoints["covered_count"] / keypoints["total"])
+        entry = {
+            "id": meta["id"],
+            "created_at": meta.get("created_at"),
+            "scenario": meta.get("scenario", ""),
+            "overall_score": (report or {}).get("overall_score"),
+            "filler_rate_pct": delivery.get("filler_rate_pct") if delivery.get("available") else None,
+            "avg_wpm": delivery.get("avg_wpm"),
+            "eye_contact_pct": behavior.get("eye_contact_pct") if behavior.get("available") else None,
+            "focus_pct": behavior.get("focus_pct"),
+            "gaze_drift_events": behavior.get("gaze_drift_events"),
+            "confidence_score": behavior.get("confidence_score"),
+            "key_points_pct": key_points_pct,
+            "lost_thread_events": keypoints.get("lost_thread_events"),
+        }
+        # Skip sessions that ended before producing anything measurable.
+        if any(entry[k] is not None for k in
+               ("overall_score", "filler_rate_pct", "avg_wpm", "eye_contact_pct")):
+            entries.append(entry)
+    entries.sort(key=lambda e: e.get("created_at") or 0)
+    return {"sessions": entries}
+
+
 @router.get("/api/sessions/{session_id}")
 def get_session(session_id: str) -> dict:
     meta = storage.read_meta(session_id)

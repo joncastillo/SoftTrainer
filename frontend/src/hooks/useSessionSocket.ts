@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioQueue } from "../audio/player";
+import { backendWsBase } from "../backend";
 import type { BehaviorSummary, ChatMessage, Report } from "../types";
 
 export interface ServerSpeech {
@@ -54,19 +55,30 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
   });
 
   useEffect(() => {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/ws/session/${sessionId}`);
-    wsRef.current = ws;
+    let ws: WebSocket | null = null;
+    let disposed = false;
     const audio = new AudioQueue();
     audioRef.current = audio;
     audio.onStateChange = (speaking) => setState((s) => ({ ...s, speaking }));
 
-    let disposed = false;
-    ws.onopen = () => !disposed && setState((s) => ({ ...s, connected: true, error: null }));
-    ws.onclose = () => !disposed && setState((s) => ({ ...s, connected: false }));
-    ws.onerror = () => !disposed && setState((s) => ({ ...s, error: "Connection error" }));
+    const connect = (wsBase: string) => {
+      if (disposed) return;
+      ws = new WebSocket(`${wsBase}/ws/session/${sessionId}`);
+      wsRef.current = ws;
+      attach(ws);
+    };
+    backendWsBase()
+      .then(connect)
+      .catch((e: Error) => !disposed && setState((s) => ({ ...s, error: e.message })));
 
-    ws.onmessage = (event) => {
+    const attach = (ws: WebSocket) => {
+      ws.onopen = () => !disposed && setState((s) => ({ ...s, connected: true, error: null }));
+      ws.onclose = () => !disposed && setState((s) => ({ ...s, connected: false }));
+      ws.onerror = () => !disposed && setState((s) => ({ ...s, error: "Connection error" }));
+      ws.onmessage = onMessage;
+    };
+
+    const onMessage = (event: MessageEvent) => {
       const msg = JSON.parse(event.data);
 
       // Side effects stay out of the state updater. StrictMode invokes
@@ -126,8 +138,10 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
 
     return () => {
       disposed = true;
-      ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;
-      ws.close();
+      if (ws) {
+        ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;
+        ws.close();
+      }
       audio.stop();
     };
   }, [sessionId]);

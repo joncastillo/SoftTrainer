@@ -1,7 +1,10 @@
 // Thin fetch wrappers around the backend REST API.
 
+import { backendBase } from "./backend";
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, init);
+  const base = await backendBase();
+  const r = await fetch(base + url, init);
   if (!r.ok) {
     let detail = r.statusText;
     try {

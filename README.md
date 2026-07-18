@@ -59,7 +59,12 @@ Frontend:
     npm run dev
 
 Open http://localhost:5173. For a production style setup, `npm run build`
-and the backend will serve `frontend/dist` at http://localhost:8000.
+and the backend will serve `frontend/dist` itself.
+
+The backend starts on port 8000 and automatically moves to the next
+free port (8001, 8002, ...) when it is taken. The frontend finds the
+backend on its own by probing ports 8000 to 8019, so no configuration
+is needed either way.
 
 ## Configuration
 

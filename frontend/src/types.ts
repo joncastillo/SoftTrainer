@@ -54,6 +54,19 @@ export interface DeliverySummary {
   avg_wpm?: number;
 }
 
+export interface KeyPointState {
+  text: string;
+  covered: boolean;
+}
+
+export interface KeyPointsSummary {
+  available?: boolean;
+  points?: KeyPointState[];
+  covered_count?: number;
+  total?: number;
+  lost_thread_events?: number;
+}
+
 export interface ReportDimension {
   name: string;
   score: number;
@@ -69,6 +82,7 @@ export interface Report {
   notable_moments: { quote: string; comment: string }[];
   behavior: BehaviorSummary;
   delivery?: DeliverySummary;
+  key_points?: KeyPointsSummary;
   scenario: string;
 }
 

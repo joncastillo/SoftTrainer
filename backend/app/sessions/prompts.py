@@ -72,7 +72,11 @@ camera metrics are present, include a "presence" dimension informed by eye conta
 head stability and the confidence score, and mention concrete numbers. If delivery \
 metrics are present, include a "delivery" dimension informed by the filler word rate \
 and speaking pace (words per minute), and cite the concrete numbers; give practical \
-advice such as pausing instead of using fillers, or adjusting pace."""
+advice such as pausing instead of using fillers, or adjusting pace. If the user set \
+key points for the session, include a "structure" dimension: note which points they \
+covered or missed and how coherently they got to them; if they lost their train of \
+thought (lost_thread_events > 0), acknowledge it supportively and suggest a concrete \
+recovery habit such as pausing and restating the last point."""
 
 
 def build_system_prompt(scenario: str, difficulty: str, minutes: int, context_chunks: list[str]) -> str:
@@ -90,7 +94,8 @@ def build_system_prompt(scenario: str, difficulty: str, minutes: int, context_ch
 
 
 def build_report_user_prompt(scenario: str, transcript: list[dict], behavior: dict,
-                             delivery: dict | None = None) -> str:
+                             delivery: dict | None = None,
+                             keypoints: dict | None = None) -> str:
     lines = [f"Scenario: {scenario}", "", "Transcript:"]
     for entry in transcript:
         who = "Candidate" if entry["role"] == "user" else "Trainer"
@@ -104,4 +109,8 @@ def build_report_user_prompt(scenario: str, transcript: list[dict], behavior: di
         lines.append(f"Speech delivery metrics: {delivery}")
     else:
         lines.append("Speech delivery metrics: not available for this session.")
+    if keypoints and keypoints.get("available"):
+        lines.append(f"Key point coverage (set by the user before the session): {keypoints}")
+    else:
+        lines.append("Key points: the user did not set any for this session.")
     return "\n".join(lines)

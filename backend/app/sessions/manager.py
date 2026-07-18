@@ -20,6 +20,7 @@ from ..speech import engines, kyutai
 from ..vision.behavior import BehaviorAnalyzer
 from ..vision.coach import BehaviorCoach
 from .delivery import DeliveryAnalyzer
+from .keypoints import KeyPointTracker
 from .prompts import FORCE_END_NOTE, WRAPUP_NOTE, build_system_prompt
 from .report import generate_report
 
@@ -133,6 +134,7 @@ class LiveSession:
         self.behavior = BehaviorAnalyzer()
         self.coach = BehaviorCoach()
         self.delivery = DeliveryAnalyzer()
+        self.keypoints = KeyPointTracker(meta.get("key_points") or [])
         self.history: list[dict] = []
         self.started_at = time.time()
         self.deadline = self.started_at + meta.get("duration_minutes", 15) * 60
@@ -166,6 +168,7 @@ class LiveSession:
             "type": "session_started",
             "seconds_left": self.seconds_left(),
             "speech": engines.speech_status(),
+            "key_points": self.keypoints.points(),
         })
         opener = (
             "System note: the session begins now. Open in character with a warm, "
@@ -223,7 +226,14 @@ class LiveSession:
         storage.append_transcript(self.id, {"role": "user", "text": text})
         await self.send({"type": "user_message", "text": text})
 
-        tip = self.delivery.observe(text, duration)
+        elapsed = 1.0 - self.seconds_left() / max(1.0, self.deadline - self.started_at)
+        changed, kp_tip = self.keypoints.observe(text, elapsed)
+        if changed:
+            await self.send({"type": "key_points", "points": self.keypoints.points()})
+        # Always feed the delivery stats, but surface at most one tip per
+        # turn; thread-loss recovery beats delivery nudges.
+        delivery_tip = self.delivery.observe(text, duration)
+        tip = kp_tip or delivery_tip
         if tip is not None:
             await self.send({"type": "coach_tip", **tip})
 
@@ -284,11 +294,13 @@ class LiveSession:
             self.stt.stop()
         summary = self.behavior.summary()
         delivery = self.delivery.summary()
+        keypoints = self.keypoints.summary()
         storage.update_meta(self.id, status="generating_report", ended_at=time.time(),
-                            end_reason=reason, behavior_summary=summary, delivery_summary=delivery)
+                            end_reason=reason, behavior_summary=summary,
+                            delivery_summary=delivery, keypoints_summary=keypoints)
         await self.send({"type": "generating_report"})
         try:
-            report = await generate_report(self.id, summary, delivery)
+            report = await generate_report(self.id, summary, delivery, keypoints)
             await self.send({"type": "session_ended", "reason": reason, "report": report})
         except Exception as e:
             storage.update_meta(self.id, status="report_failed")

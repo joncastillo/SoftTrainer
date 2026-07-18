@@ -52,6 +52,26 @@ export function ReportView({ report }: { report: Report }) {
         </section>
       )}
 
+      {report.key_points?.available && (
+        <section>
+          <h3>Key points</h3>
+          <p className="hint">
+            Covered {report.key_points.covered_count} of {report.key_points.total}
+            {(report.key_points.lost_thread_events ?? 0) > 0 &&
+              ` · lost the thread ${report.key_points.lost_thread_events} time${
+                report.key_points.lost_thread_events === 1 ? "" : "s"}`}
+          </p>
+          <ul className="keypoint-list static">
+            {report.key_points.points?.map((p) => (
+              <li key={p.text} className={p.covered ? "covered" : "missed"}>
+                <span className="keypoint-mark">{p.covered ? "✓" : "✗"}</span>
+                {p.text}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {report.strengths?.length > 0 && (
         <section>
           <h3>Strengths</h3>

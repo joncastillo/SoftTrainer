@@ -23,6 +23,7 @@ def create_session(body: SessionCreate) -> dict:
         "subtitles": body.subtitles,
         "document_ids": body.document_ids,
         "difficulty": body.difficulty,
+        "key_points": [p.strip() for p in body.key_points if p.strip()],
     })
     return {"id": session_id}
 

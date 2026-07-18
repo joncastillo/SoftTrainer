@@ -139,6 +139,17 @@ button.chip {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+.keypoint-input { display: block; width: 100%; max-width: 480px; margin-bottom: 8px; }
+.keypoint-list {
+  list-style: none; padding: 8px 10px; margin: 0;
+  background: var(--panel-2); border-radius: 8px;
+  font-size: 13px; color: var(--muted);
+}
+.keypoint-list li { display: flex; gap: 8px; padding: 2px 0; align-items: baseline; }
+.keypoint-list li.covered { color: var(--ok); }
+.keypoint-list li.missed { color: var(--danger); }
+.keypoint-mark { font-weight: 600; width: 14px; flex: none; }
+
 .text-input { display: flex; gap: 8px; }
 .text-input textarea { flex: 1; }
 

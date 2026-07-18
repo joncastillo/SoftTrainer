@@ -13,6 +13,9 @@ class SessionCreate(BaseModel):
     subtitles: bool = True
     document_ids: list[str] = Field(default_factory=list)
     difficulty: str = Field(default="medium", pattern="^(easy|medium|hard)$")
+    key_points: list[str] = Field(
+        default_factory=list, max_length=5,
+        description="Points the user wants to land during the session")
 
 
 class ProviderConfig(BaseModel):

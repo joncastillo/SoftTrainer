@@ -21,6 +21,7 @@ export function SetupPage() {
   const [minutes, setMinutes] = useState(15);
   const [difficulty, setDifficulty] = useState("medium");
   const [subtitles, setSubtitles] = useState(true);
+  const [keyPoints, setKeyPoints] = useState<string[]>(["", "", ""]);
   const [documents, setDocuments] = useState<DocumentMeta[]>([]);
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -63,6 +64,7 @@ export function SetupPage() {
         subtitles,
         document_ids: selectedDocs,
         difficulty,
+        key_points: keyPoints.map((p) => p.trim()).filter(Boolean),
       });
       navigate(`/session/${id}`);
     } catch (e: any) {
@@ -125,6 +127,31 @@ export function SetupPage() {
           Subtitles
         </label>
       </div>
+
+      <section>
+        <h3>Key points (optional)</h3>
+        <p className="hint">
+          Up to five points you want to land. They show as a subtle checklist during
+          the session, and the coach nudges you if one is still missing near the end.
+        </p>
+        {keyPoints.map((p, i) => (
+          <input
+            key={i}
+            className="keypoint-input"
+            value={p}
+            placeholder={`Key point ${i + 1}`}
+            maxLength={120}
+            onChange={(e) =>
+              setKeyPoints((ks) => ks.map((k, j) => (j === i ? e.target.value : k)))
+            }
+          />
+        ))}
+        {keyPoints.length < 5 && (
+          <button className="link" onClick={() => setKeyPoints((ks) => [...ks, ""])}>
+            + add another
+          </button>
+        )}
+      </section>
 
       <section>
         <h3>Documents (resume, job description, notes)</h3>

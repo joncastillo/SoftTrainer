@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioQueue } from "../audio/player";
 import { backendWsBase } from "../backend";
-import type { BehaviorSummary, ChatMessage, CoachTip, Report } from "../types";
+import type { BehaviorSummary, ChatMessage, CoachTip, KeyPointState, Report } from "../types";
 
 export interface ServerSpeech {
   stt_available: boolean;
@@ -22,6 +22,7 @@ export interface SessionSocketState {
   serverSpeech: ServerSpeech | null;
   rolling: BehaviorSummary | null;
   coachTip: CoachTip | null;
+  keyPoints: KeyPointState[];
   report: Report | null;
   generatingReport: boolean;
   ended: boolean;
@@ -50,6 +51,7 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
     serverSpeech: null,
     rolling: null,
     coachTip: null,
+    keyPoints: [],
     report: null,
     generatingReport: false,
     ended: false,
@@ -99,7 +101,14 @@ export function useSessionSocket(sessionId: string): SessionSocketApi {
       setState((s) => {
         switch (msg.type) {
           case "session_started":
-            return { ...s, secondsLeft: msg.seconds_left, serverSpeech: msg.speech };
+            return {
+              ...s,
+              secondsLeft: msg.seconds_left,
+              serverSpeech: msg.speech,
+              keyPoints: msg.key_points ?? [],
+            };
+          case "key_points":
+            return { ...s, keyPoints: msg.points ?? [] };
           case "assistant_delta": {
             const messages = [...s.messages];
             const last = messages[messages.length - 1];

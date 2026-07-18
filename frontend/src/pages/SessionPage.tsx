@@ -223,6 +223,16 @@ export function SessionPage() {
 
         <aside className="side-panel">
           <CameraPanel onFrame={socket.sendFrame} rolling={socket.rolling} tip={socket.coachTip} />
+          {socket.keyPoints.length > 0 && (
+            <ul className="keypoint-list" aria-label="Key points">
+              {socket.keyPoints.map((p) => (
+                <li key={p.text} className={p.covered ? "covered" : ""}>
+                  <span className="keypoint-mark">{p.covered ? "✓" : "○"}</span>
+                  {p.text}
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="mic-controls">
             <button className={micOn ? "danger" : "primary"} onClick={toggleMic} disabled={socket.ended}>
               {micOn ? "Mute microphone" : "Enable microphone"}

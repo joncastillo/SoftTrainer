@@ -12,6 +12,18 @@ frontend/dist/
 # App data (conversations, models, uploads are stored here at runtime)
 data/
 
+# Virtualenv created at the repo root (python -m venv .)
+Lib/
+Include/
+Scripts/
+share/
+pyvenv.cfg
+
+# Editors / tooling
+.idea/
+.vscode/
+.serena/
+
 # Misc
 .DS_Store
 *.log

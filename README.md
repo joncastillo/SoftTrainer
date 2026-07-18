@@ -46,8 +46,8 @@ Backend (Python 3.10+):
 
     cd backend
     python -m venv .venv && source .venv/bin/activate
-    pip install -r requirements.txt          # core
-    pip install -r requirements-full.txt     # optional: speech, vision, local LLMs
+    pip install -r requirements.txt          # core, includes self hosted inference
+    pip install -r requirements-full.txt     # optional: Kyutai speech, camera analysis
     python run.py
 
 Frontend:
@@ -76,9 +76,11 @@ The app runs with the core requirements alone and degrades gracefully:
 
 | Capability | Needs | Fallback |
 | --- | --- | --- |
-| Kyutai STT/TTS | torch, moshi | Browser SpeechRecognition and speechSynthesis |
+| Kyutai STT/TTS | moshi | Browser SpeechRecognition and speechSynthesis |
 | Camera analysis | mediapipe, opencv | Presence section omitted from reports |
-| Local HF inference | transformers, accelerate | Cloud or Ollama providers |
 | Dense embeddings | sentence-transformers | Hashed bag of words embeddings |
+
+Self hosted inference (torch plus transformers) is part of the core
+requirements since it is the default provider.
 
 `GET /api/health` reports which capabilities are active on your install.

@@ -67,6 +67,18 @@ export interface HubModel {
   downloads: number;
   likes: number;
   downloaded: boolean;
+  params?: string | null;
+  suitable?: boolean;
+  reason?: string;
+}
+
+export interface RecommendedModel {
+  repo_id: string;
+  params: string;
+  note: string;
+  gated?: boolean;
+  downloaded: boolean;
+  loaded: boolean;
 }
 
 export interface LocalModel {

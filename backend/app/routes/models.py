@@ -8,6 +8,11 @@ from ..schemas import DownloadRequest, LoadRequest
 router = APIRouter()
 
 
+@router.get("/api/models/recommended")
+def recommended() -> list[dict]:
+    return manager.recommended()
+
+
 @router.get("/api/models/search")
 def search(q: str, limit: int = 20) -> list[dict]:
     try:
@@ -27,17 +32,21 @@ def download(body: DownloadRequest) -> dict:
 
 
 @router.get("/api/models/download-status")
-def status(repo_id: str) -> dict:
+def download_status(repo_id: str) -> dict:
     return manager.download_status(repo_id)
 
 
 @router.post("/api/models/load")
 def load(body: LoadRequest) -> dict:
     try:
-        manager.load(body.repo_id)
-        return {"ok": True}
+        return manager.start_load(body.repo_id)
     except Exception as e:
         raise HTTPException(400, str(e))
+
+
+@router.get("/api/models/load-status")
+def load_status(repo_id: str) -> dict:
+    return manager.load_status(repo_id)
 
 
 @router.post("/api/models/unload")

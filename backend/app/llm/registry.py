@@ -22,10 +22,10 @@ _DEFAULTS = [
     {"id": "anthropic", "kind": "anthropic", "label": "Anthropic",
      "base_url": "https://api.anthropic.com", "model": "claude-sonnet-5",
      "api_key_env": "ANTHROPIC_API_KEY", "active": False},
-    {"id": "ollama", "kind": "ollama", "label": "Ollama (local)",
-     "base_url": "http://localhost:11434", "model": "llama3.2", "active": True},
-    {"id": "local-hf", "kind": "local-hf", "label": "Local Hugging Face model",
-     "model": "", "active": False},
+    {"id": "ollama", "kind": "ollama", "label": "Ollama (optional)",
+     "base_url": "http://localhost:11434", "model": "llama3.2", "active": False},
+    {"id": "local-hf", "kind": "local-hf", "label": "Self hosted model",
+     "model": "", "active": True},
 ]
 
 
@@ -72,6 +72,20 @@ def set_active(provider_id: str) -> None:
     providers = _load()
     for p in providers:
         p["active"] = p["id"] == provider_id
+    _save(providers)
+
+
+def configure_local_model(repo_id: str) -> None:
+    """Point the self hosted provider at a model and make it active."""
+    providers = _load()
+    entry = next((p for p in providers if p["kind"] == "local-hf"), None)
+    if entry is None:
+        entry = {"id": "local-hf", "kind": "local-hf",
+                 "label": "Self hosted model", "model": repo_id}
+        providers.append(entry)
+    entry["model"] = repo_id
+    for p in providers:
+        p["active"] = p is entry
     _save(providers)
 
 

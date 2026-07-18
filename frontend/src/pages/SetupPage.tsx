@@ -1,8 +1,9 @@
 // New session form: scenario, provider, bounds, subtitles, documents.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { ModelManagerDialog } from "../components/ModelManagerDialog";
 import type { DocumentMeta, ProviderConfig } from "../types";
 
 const EXAMPLES = [
@@ -24,15 +25,19 @@ export function SetupPage() {
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [modelsOpen, setModelsOpen] = useState(false);
 
-  useEffect(() => {
+  const refreshProviders = useCallback(() => {
     api.listProviders().then((ps) => {
       setProviders(ps);
-      const active = ps.find((p) => p.active);
-      if (active) setProviderId(active.id);
+      setProviderId((cur) => cur || ps.find((p) => p.active)?.id || "");
     });
-    api.listDocuments().then(setDocuments);
   }, []);
+
+  useEffect(() => {
+    refreshProviders();
+    api.listDocuments().then(setDocuments);
+  }, [refreshProviders]);
 
   const upload = async (file: File) => {
     setUploading(true);
@@ -98,6 +103,7 @@ export function SetupPage() {
             ))}
           </select>
         </label>
+        <button onClick={() => setModelsOpen(true)}>Manage models</button>
         <label>
           Length
           <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
@@ -162,6 +168,12 @@ export function SetupPage() {
       <button className="primary" disabled={scenario.trim().length < 3} onClick={start}>
         Start session
       </button>
+
+      <ModelManagerDialog
+        open={modelsOpen}
+        onClose={() => setModelsOpen(false)}
+        onChanged={refreshProviders}
+      />
     </div>
   );
 }

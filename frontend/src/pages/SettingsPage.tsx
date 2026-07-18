@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { ModelManager } from "../components/ModelManager";
+import { ModelManagerDialog } from "../components/ModelManagerDialog";
 import type { ProviderConfig } from "../types";
 
 const EMPTY: ProviderConfig = {
@@ -20,6 +20,7 @@ export function SettingsPage() {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [editing, setEditing] = useState<ProviderConfig | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [modelsOpen, setModelsOpen] = useState(false);
 
   const refresh = () => api.listProviders().then(setProviders);
   useEffect(() => {
@@ -115,9 +116,21 @@ export function SettingsPage() {
       </section>
 
       <section>
-        <h2>Local models (Hugging Face)</h2>
-        <ModelManager />
+        <h2>Self hosted models</h2>
+        <p className="hint">
+          Models downloaded from Hugging Face run inside the app, no external
+          server needed. Loading one makes it the active provider.
+        </p>
+        <button className="primary" onClick={() => setModelsOpen(true)}>
+          Open model manager
+        </button>
       </section>
+
+      <ModelManagerDialog
+        open={modelsOpen}
+        onClose={() => setModelsOpen(false)}
+        onChanged={() => void refresh()}
+      />
     </div>
   );
 }

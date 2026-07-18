@@ -21,15 +21,18 @@ feedback and a written assessment at the end.
 - Optional live subtitles for everything the trainer says.
 - Everything persists to disk under `data/`: transcripts, behavior metrics,
   reports, uploaded documents, provider config and downloaded models.
-- Multiple LLM providers: OpenAI compatible endpoints (OpenAI, vLLM,
-  LM Studio, llama.cpp server), Anthropic, Ollama, and fully local
-  Hugging Face models. Add, test and switch providers in Settings.
+- Self hosted models by default: the app downloads and runs Hugging Face
+  models itself through transformers, no external inference server needed.
+  OpenAI compatible endpoints (OpenAI, vLLM, LM Studio, llama.cpp server),
+  Anthropic and Ollama remain available as optional providers in Settings.
 - Document uploads (resume, job description, notes) with RAG: files are
   chunked, embedded and retrieved so the trainer references real details.
 - Coding problems render as formatted markdown with syntax highlighted
   code blocks on screen, while the voice only speaks the prose.
-- Built in Hugging Face model manager: search the hub, download models,
-  load and unload them for local inference.
+- Model manager dialog: curated recommendations, a hub scan that rates
+  each model's suitability (instruct tuned, size, gating, weight format),
+  downloads with progress, and load/unload/delete controls. Loading a
+  model automatically makes it the active provider.
 
 ## Layout
 
@@ -62,8 +65,10 @@ and the backend will serve `frontend/dist` at http://localhost:8000.
   the default provider entries. Keys can also be entered in Settings and
   are stored in `data/config/providers.json`.
 - `SOFTTRAINER_DATA` overrides the data directory location.
-- Ollama is the default active provider and expects a server on
-  localhost:11434. Switch providers in Settings.
+- The self hosted provider is active by default: open the model manager
+  (Settings, or "Manage models" on the start page), download a
+  recommended model and load it. Ollama and cloud providers can be
+  activated in Settings instead.
 
 ## Optional dependencies
 

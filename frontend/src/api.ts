@@ -42,12 +42,15 @@ export const api = {
   activateProvider: (id: string) => request<any>(`/api/providers/${id}/activate`, { method: "POST" }),
   testProvider: (id: string) => request<any>(`/api/providers/${id}/test`, { method: "POST" }),
 
+  recommendedModels: () => request<any[]>("/api/models/recommended"),
   searchModels: (q: string) => request<any[]>(`/api/models/search?q=${encodeURIComponent(q)}`),
   localModels: () => request<any[]>("/api/models/local"),
   downloadModel: (repo_id: string) => request<any>("/api/models/download", json({ repo_id })),
   downloadStatus: (repo_id: string) =>
     request<any>(`/api/models/download-status?repo_id=${encodeURIComponent(repo_id)}`),
   loadModel: (repo_id: string) => request<any>("/api/models/load", json({ repo_id })),
+  loadStatus: (repo_id: string) =>
+    request<any>(`/api/models/load-status?repo_id=${encodeURIComponent(repo_id)}`),
   unloadModel: (repo_id: string) => request<any>("/api/models/unload", json({ repo_id })),
   deleteModel: (repo_id: string) => request<any>(`/api/models/${repo_id}`, { method: "DELETE" }),
 };

@@ -59,10 +59,12 @@ class LocalHFProvider(ChatProvider):
     async def stream_chat(self, messages: list[dict], max_tokens: int = 1024) -> AsyncIterator[str]:
         from transformers import TextIteratorStreamer
 
-        pair = get_loaded(self.config["model"])
+        repo_id = self.config.get("model") or ""
+        pair = get_loaded(repo_id)
         if pair is None:
+            hint = "Open the model manager and load a model first."
             raise RuntimeError(
-                f"Model {self.config['model']} is not loaded. Load it from the model manager first."
+                f"Model {repo_id!r} is not loaded. {hint}" if repo_id else f"No model selected. {hint}"
             )
         tokenizer, model = pair
         prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)

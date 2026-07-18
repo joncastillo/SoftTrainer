@@ -39,6 +39,9 @@ class DeliveryAnalyzer:
         self.total_fillers = 0
         self.total_speech_seconds = 0.0
         self.utterances = 0
+        # Per-utterance records (monotonic t, words, fillers) so composure
+        # scoring can window them against pressure events.
+        self.records: list[dict] = []
         self._last_tip_at = 0.0
         self._kind_at: dict[str, float] = {}
 
@@ -54,6 +57,7 @@ class DeliveryAnalyzer:
         self.total_words += words
         self.total_fillers += fillers
         self.utterances += 1
+        self.records.append({"t": time.monotonic(), "words": words, "fillers": fillers})
         if duration and duration > 0:
             self.total_speech_seconds += duration
         return self._tip(words, fillers, duration)

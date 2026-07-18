@@ -17,7 +17,8 @@ def _parse_json(text: str) -> dict:
 
 async def generate_report(session_id: str, behavior_summary: dict,
                           delivery_summary: dict | None = None,
-                          keypoints_summary: dict | None = None) -> dict:
+                          keypoints_summary: dict | None = None,
+                          composure_summary: dict | None = None) -> dict:
     """Ask the LLM for a structured assessment and persist it."""
     meta = storage.read_meta(session_id) or {}
     transcript = storage.read_transcript(session_id)
@@ -27,7 +28,7 @@ async def generate_report(session_id: str, behavior_summary: dict,
         {"role": "system", "content": REPORT_SYSTEM},
         {"role": "user", "content": build_report_user_prompt(
             meta.get("scenario", ""), transcript, behavior_summary,
-            delivery_summary, keypoints_summary)},
+            delivery_summary, keypoints_summary, composure_summary)},
     ]
     raw = await provider.complete(messages, max_tokens=2000)
     try:
@@ -41,6 +42,7 @@ async def generate_report(session_id: str, behavior_summary: dict,
     report["behavior"] = behavior_summary
     report["delivery"] = delivery_summary or {"available": False}
     report["key_points"] = keypoints_summary or {"available": False}
+    report["composure"] = composure_summary or {"available": False}
     report["scenario"] = meta.get("scenario", "")
     storage.write_report(session_id, report)
     storage.update_meta(session_id, status="completed", has_report=True)

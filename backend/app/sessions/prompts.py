@@ -32,7 +32,14 @@ not spoken aloud, so keep the spoken part self contained.
 - The session is time bounded. When you receive a system note that time is nearly \
 up, bring the conversation to a natural close within one or two turns, the way a \
 real meeting would end.
-{context_block}"""
+{pressure_block}{context_block}"""
+
+PRESSURE_TEMPLATE = """
+- This is pressure training: an unseen audience occasionally heckles or the room \
+gets distracting. Those interjections are shown to the user directly; you do not \
+repeat them. Stay in character, keep the meeting on track, and react naturally, \
+briefly acknowledging an interruption at most.
+"""
 
 CONTEXT_TEMPLATE = """
 Background documents provided by the user (resume, job description, supporting \
@@ -78,10 +85,15 @@ advice such as pausing instead of using fillers, or adjusting pace. If the user 
 key points for the session, include a "structure" dimension: note which points they \
 covered or missed and how coherently they got to them; if they lost their train of \
 thought (lost_thread_events > 0), acknowledge it supportively and suggest a concrete \
-recovery habit such as pausing and restating the last point."""
+recovery habit such as pausing and restating the last point. If composure metrics \
+are present (this was pressure training with audience heckles and distractions), \
+include a "composure" dimension comparing delivery and eye contact under pressure \
+against the baseline, citing the numbers; frame holding steady as the achievement \
+and any wobble as normal and trainable, never as failure."""
 
 
-def build_system_prompt(scenario: str, difficulty: str, minutes: int, context_chunks: list[str]) -> str:
+def build_system_prompt(scenario: str, difficulty: str, minutes: int,
+                        context_chunks: list[str], pressure: bool = False) -> str:
     """Assemble the roleplay system prompt, with RAG context when available."""
     context_block = ""
     if context_chunks:
@@ -91,16 +103,19 @@ def build_system_prompt(scenario: str, difficulty: str, minutes: int, context_ch
         scenario=scenario.strip(),
         difficulty=difficulty,
         minutes=minutes,
+        pressure_block=PRESSURE_TEMPLATE if pressure else "",
         context_block=context_block,
     )
 
 
 def build_report_user_prompt(scenario: str, transcript: list[dict], behavior: dict,
                              delivery: dict | None = None,
-                             keypoints: dict | None = None) -> str:
+                             keypoints: dict | None = None,
+                             composure: dict | None = None) -> str:
     lines = [f"Scenario: {scenario}", "", "Transcript:"]
+    roles = {"user": "Candidate", "assistant": "Trainer", "event": "Audience/Room"}
     for entry in transcript:
-        who = "Candidate" if entry["role"] == "user" else "Trainer"
+        who = roles.get(entry["role"], entry["role"])
         lines.append(f"{who}: {entry['text']}")
     lines.append("")
     if behavior.get("available"):
@@ -115,4 +130,6 @@ def build_report_user_prompt(scenario: str, transcript: list[dict], behavior: di
         lines.append(f"Key point coverage (set by the user before the session): {keypoints}")
     else:
         lines.append("Key points: the user did not set any for this session.")
+    if composure and composure.get("available"):
+        lines.append(f"Composure under pressure (heckles/distractions were injected): {composure}")
     return "\n".join(lines)

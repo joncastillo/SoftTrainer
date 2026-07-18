@@ -5,6 +5,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
+from pydantic import BaseModel
+
 from .. import storage
 from ..schemas import SessionCreate
 from ..sessions.manager import LiveSession
@@ -24,6 +26,8 @@ def create_session(body: SessionCreate) -> dict:
         "document_ids": body.document_ids,
         "difficulty": body.difficulty,
         "key_points": [p.strip() for p in body.key_points if p.strip()],
+        "pressure": body.pressure,
+        "grounding": body.grounding,
     })
     return {"id": session_id}
 
@@ -31,6 +35,48 @@ def create_session(body: SessionCreate) -> dict:
 @router.get("/api/sessions")
 def list_sessions() -> list[dict]:
     return storage.list_sessions()
+
+
+class ReflectionBody(BaseModel):
+    answers: list[dict]
+
+
+@router.post("/api/sessions/{session_id}/reflection")
+def save_reflection(session_id: str, body: ReflectionBody) -> dict:
+    if storage.read_meta(session_id) is None:
+        raise HTTPException(404, "Session not found")
+    storage.update_meta(session_id, reflection=body.answers)
+    return {"ok": True}
+
+
+# Graded exposure: one rung at a time, difficulty first, then pressure.
+LADDER = [("easy", "off"), ("medium", "off"), ("hard", "off"),
+          ("hard", "low"), ("hard", "medium"), ("hard", "high")]
+STEP_UP_SCORE = 70
+STEP_DOWN_SCORE = 45
+
+
+def _ladder_suggestion(entries: list[dict]) -> dict | None:
+    """Suggest the next session's difficulty/pressure from recent scores."""
+    scored = [e for e in entries if e.get("overall_score") is not None]
+    if len(scored) < 2:
+        return None
+    last = scored[-1]
+    rung = (last.get("difficulty", "medium"), last.get("pressure", "off"))
+    idx = LADDER.index(rung) if rung in LADDER else 1
+    avg = (scored[-1]["overall_score"] + scored[-2]["overall_score"]) / 2
+    if avg >= STEP_UP_SCORE and idx < len(LADDER) - 1:
+        difficulty, pressure = LADDER[idx + 1]
+        text = ("You've been solid at this level for two sessions — ready for "
+                f"the next rung: {difficulty} difficulty, {pressure} pressure.")
+    elif avg < STEP_DOWN_SCORE and idx > 0:
+        difficulty, pressure = LADDER[idx - 1]
+        text = ("No shame in consolidating: try a session at "
+                f"{difficulty} difficulty, {pressure} pressure and rebuild momentum.")
+    else:
+        difficulty, pressure = rung
+        text = "You're at the right level — keep practising here until it feels easy."
+    return {"text": text, "difficulty": difficulty, "pressure": pressure}
 
 
 @router.get("/api/progress")
@@ -49,6 +95,8 @@ def progress() -> dict:
             "id": meta["id"],
             "created_at": meta.get("created_at"),
             "scenario": meta.get("scenario", ""),
+            "difficulty": meta.get("difficulty", "medium"),
+            "pressure": meta.get("pressure", "off"),
             "overall_score": (report or {}).get("overall_score"),
             "filler_rate_pct": delivery.get("filler_rate_pct") if delivery.get("available") else None,
             "avg_wpm": delivery.get("avg_wpm"),
@@ -64,7 +112,7 @@ def progress() -> dict:
                ("overall_score", "filler_rate_pct", "avg_wpm", "eye_contact_pct")):
             entries.append(entry)
     entries.sort(key=lambda e: e.get("created_at") or 0)
-    return {"sessions": entries}
+    return {"sessions": entries, "suggestion": _ladder_suggestion(entries)}
 
 
 @router.get("/api/sessions/{session_id}")

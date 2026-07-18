@@ -7,6 +7,7 @@ frame when mediapipe or opencv are not installed.
 
 import base64
 import logging
+import time
 from typing import Optional
 
 import numpy as np
@@ -132,7 +133,7 @@ class BehaviorAnalyzer:
         h, w = img.shape[:2]
         result = mesh.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         if not result.multi_face_landmarks:
-            sample = {"face": False}
+            sample = {"face": False, "t": time.monotonic()}
             self.samples.append(sample)
             return sample
 
@@ -165,6 +166,7 @@ class BehaviorAnalyzer:
 
         sample = {
             "face": True,
+            "t": time.monotonic(),
             "eye_contact": bool(eye_contact),
             "gaze_x": round(gaze_x, 3),
             "yaw": round(yaw, 3),

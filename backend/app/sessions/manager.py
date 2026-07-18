@@ -21,6 +21,7 @@ from ..vision.behavior import BehaviorAnalyzer
 from ..vision.coach import BehaviorCoach
 from .delivery import DeliveryAnalyzer
 from .keypoints import KeyPointTracker
+from .pressure import PressureDirector
 from .prompts import FORCE_END_NOTE, WRAPUP_NOTE, build_system_prompt
 from .report import generate_report
 
@@ -135,6 +136,7 @@ class LiveSession:
         self.coach = BehaviorCoach()
         self.delivery = DeliveryAnalyzer()
         self.keypoints = KeyPointTracker(meta.get("key_points") or [])
+        self.pressure = PressureDirector(meta.get("pressure", "off"))
         self.history: list[dict] = []
         self.started_at = time.time()
         self.deadline = self.started_at + meta.get("duration_minutes", 15) * 60
@@ -149,7 +151,8 @@ class LiveSession:
             meta["scenario"], meta.get("document_ids", []), top_k=4)]
         self.system_prompt = build_system_prompt(
             meta["scenario"], meta.get("difficulty", "medium"),
-            meta.get("duration_minutes", 15), chunks)
+            meta.get("duration_minutes", 15), chunks,
+            pressure=self.pressure.enabled)
 
     def seconds_left(self) -> float:
         return max(0.0, self.deadline - time.time())
@@ -176,6 +179,7 @@ class LiveSession:
             "into your first question or opening move."
         )
         await self._assistant_turn(extra_note=opener)
+        self.pressure.start(self)
 
     def _messages(self, extra_note: Optional[str] = None) -> list[dict]:
         messages = [{"role": "system", "content": self.system_prompt}]
@@ -290,17 +294,21 @@ class LiveSession:
         if self.ended:
             return
         self.ended = True
+        self.pressure.stop()
         if self.stt is not None:
             self.stt.stop()
         summary = self.behavior.summary()
         delivery = self.delivery.summary()
         keypoints = self.keypoints.summary()
+        composure = self.pressure.composure_summary(
+            self.delivery.records, self.behavior.samples)
         storage.update_meta(self.id, status="generating_report", ended_at=time.time(),
                             end_reason=reason, behavior_summary=summary,
-                            delivery_summary=delivery, keypoints_summary=keypoints)
+                            delivery_summary=delivery, keypoints_summary=keypoints,
+                            composure_summary=composure)
         await self.send({"type": "generating_report"})
         try:
-            report = await generate_report(self.id, summary, delivery, keypoints)
+            report = await generate_report(self.id, summary, delivery, keypoints, composure)
             await self.send({"type": "session_ended", "reason": reason, "report": report})
         except Exception as e:
             storage.update_meta(self.id, status="report_failed")

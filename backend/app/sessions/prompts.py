@@ -69,7 +69,9 @@ using exactly this shape:
 Choose 4 to 6 dimensions that fit the scenario, for example communication clarity, \
 technical depth, structure, composure, persuasiveness, listening. If behavioral \
 camera metrics are present, include a "presence" dimension informed by eye contact, \
-head stability and the confidence score, and mention concrete numbers. If delivery \
+head stability and the confidence score, and mention concrete numbers; if focus \
+metrics show gaze drifts (gaze_drift_events > 0 or a low focus_pct), address staying \
+focused supportively and suggest a concrete anchoring habit. If delivery \
 metrics are present, include a "delivery" dimension informed by the filler word rate \
 and speaking pace (words per minute), and cite the concrete numbers; give practical \
 advice such as pausing instead of using fillers, or adjusting pace. If the user set \

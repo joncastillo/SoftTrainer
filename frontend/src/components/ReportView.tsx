@@ -37,6 +37,14 @@ export function ReportView({ report }: { report: Report }) {
             <li>Head stability: {report.behavior.head_stability}</li>
             <li>Camera confidence score: {report.behavior.confidence_score}</li>
             <li>Face visible: {report.behavior.face_visible_pct}% of frames</li>
+            {report.behavior.focus_pct != null && (
+              <li>
+                On-screen focus: {report.behavior.focus_pct}%
+                {(report.behavior.gaze_drift_events ?? 0) > 0 &&
+                  ` (drifted away ${report.behavior.gaze_drift_events} time${
+                    report.behavior.gaze_drift_events === 1 ? "" : "s"})`}
+              </li>
+            )}
           </ul>
         </section>
       )}

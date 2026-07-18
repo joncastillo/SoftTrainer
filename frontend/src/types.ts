@@ -42,6 +42,8 @@ export interface BehaviorSummary {
   head_stability?: number;
   avg_smile?: number;
   blinks?: number;
+  focus_pct?: number;
+  gaze_drift_events?: number;
   confidence_score?: number;
 }
 

@@ -15,6 +15,8 @@ from typing import Optional
 
 import numpy as np
 
+from .behavior import DRIFT_RUN, gaze_off
+
 WINDOW = 16              # most recent samples to judge on (~10s at 700ms/frame)
 MIN_SAMPLES = 8          # need at least this many before saying anything
 GLOBAL_COOLDOWN = 14.0   # seconds between any two tips, so it never nags
@@ -51,6 +53,17 @@ class BehaviorCoach:
         recent = samples[-WINDOW:]
         if len(recent) < MIN_SAMPLES:
             return None
+
+        # A sustained run of looking away right now is a distraction, not an
+        # averaged eye-contact problem: catch it before the window stats do.
+        run = 0
+        for s in reversed(samples):
+            if not gaze_off(s):
+                break
+            run += 1
+        if run >= DRIFT_RUN:
+            return self._maybe(now, "focus",
+                               "You've drifted off the screen. Come back to your point.")
 
         faced = [s for s in recent if s.get("face")]
         if len(faced) / len(recent) < FACE_MIN:

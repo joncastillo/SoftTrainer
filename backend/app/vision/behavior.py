@@ -19,6 +19,32 @@ LEFT_IRIS = [468, 469, 470, 471, 472]
 RIGHT_IRIS = [473, 474, 475, 476, 477]
 MOUTH = [61, 291, 13, 14]
 
+# Looking clearly away from the screen: eyes far off-center or head turned.
+GAZE_OFF_X = 0.28
+GAZE_OFF_YAW = 0.35
+DRIFT_RUN = 6            # consecutive off-gaze samples (~4s) that count as a drift
+
+
+def gaze_off(sample: dict) -> bool:
+    """True when a faced sample is looking clearly away from the screen."""
+    if not sample.get("face"):
+        return False
+    return (abs(sample.get("gaze_x", 0.0)) > GAZE_OFF_X
+            or abs(sample.get("yaw", 0.0)) > GAZE_OFF_YAW)
+
+
+def drift_events(samples: list[dict]) -> int:
+    """Count sustained off-gaze runs of at least DRIFT_RUN samples."""
+    events = run = 0
+    for s in samples:
+        if gaze_off(s):
+            run += 1
+            if run == DRIFT_RUN:
+                events += 1
+        else:
+            run = 0
+    return events
+
 _face_mesh = None
 _cv2 = None
 _vision_failed = False
@@ -157,6 +183,7 @@ class BehaviorAnalyzer:
             return {"frames": len(self.samples), "face_visible_pct": 0.0, "available": vision_available()}
 
         contact_pct = 100.0 * sum(1 for s in faced if s.get("eye_contact")) / len(faced)
+        focus_pct = 100.0 * sum(1 for s in faced if not gaze_off(s)) / len(faced)
         yaws = np.array([s["yaw"] for s in faced])
         pitches = np.array([s["pitch"] for s in faced])
         head_stability = float(max(0.0, 1.0 - 3.0 * (np.std(yaws) + np.std(pitches))))
@@ -177,5 +204,7 @@ class BehaviorAnalyzer:
             "head_stability": round(head_stability, 2),
             "avg_smile": round(smile_avg, 3),
             "blinks": self.blinks,
+            "focus_pct": round(focus_pct, 1),
+            "gaze_drift_events": drift_events(self.samples),
             "confidence_score": round(100 * confidence, 1),
         }

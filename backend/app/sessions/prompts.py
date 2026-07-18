@@ -69,7 +69,10 @@ using exactly this shape:
 Choose 4 to 6 dimensions that fit the scenario, for example communication clarity, \
 technical depth, structure, composure, persuasiveness, listening. If behavioral \
 camera metrics are present, include a "presence" dimension informed by eye contact, \
-head stability and the confidence score, and mention concrete numbers."""
+head stability and the confidence score, and mention concrete numbers. If delivery \
+metrics are present, include a "delivery" dimension informed by the filler word rate \
+and speaking pace (words per minute), and cite the concrete numbers; give practical \
+advice such as pausing instead of using fillers, or adjusting pace."""
 
 
 def build_system_prompt(scenario: str, difficulty: str, minutes: int, context_chunks: list[str]) -> str:
@@ -86,7 +89,8 @@ def build_system_prompt(scenario: str, difficulty: str, minutes: int, context_ch
     )
 
 
-def build_report_user_prompt(scenario: str, transcript: list[dict], behavior: dict) -> str:
+def build_report_user_prompt(scenario: str, transcript: list[dict], behavior: dict,
+                             delivery: dict | None = None) -> str:
     lines = [f"Scenario: {scenario}", "", "Transcript:"]
     for entry in transcript:
         who = "Candidate" if entry["role"] == "user" else "Trainer"
@@ -96,4 +100,8 @@ def build_report_user_prompt(scenario: str, transcript: list[dict], behavior: di
         lines.append(f"Behavioral camera metrics: {behavior}")
     else:
         lines.append("Behavioral camera metrics: not available for this session.")
+    if delivery and delivery.get("available"):
+        lines.append(f"Speech delivery metrics: {delivery}")
+    else:
+        lines.append("Speech delivery metrics: not available for this session.")
     return "\n".join(lines)

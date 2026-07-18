@@ -45,6 +45,15 @@ export interface BehaviorSummary {
   confidence_score?: number;
 }
 
+export interface DeliverySummary {
+  available?: boolean;
+  utterances?: number;
+  total_words?: number;
+  filler_count?: number;
+  filler_rate_pct?: number;
+  avg_wpm?: number;
+}
+
 export interface ReportDimension {
   name: string;
   score: number;
@@ -59,6 +68,7 @@ export interface Report {
   improvements: string[];
   notable_moments: { quote: string; comment: string }[];
   behavior: BehaviorSummary;
+  delivery?: DeliverySummary;
   scenario: string;
 }
 

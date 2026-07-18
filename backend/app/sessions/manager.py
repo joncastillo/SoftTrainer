@@ -19,6 +19,7 @@ from ..rag import store as rag_store
 from ..speech import engines, kyutai
 from ..vision.behavior import BehaviorAnalyzer
 from ..vision.coach import BehaviorCoach
+from .delivery import DeliveryAnalyzer
 from .prompts import FORCE_END_NOTE, WRAPUP_NOTE, build_system_prompt
 from .report import generate_report
 
@@ -131,6 +132,7 @@ class LiveSession:
         self.provider = get_provider(meta.get("provider_id"))
         self.behavior = BehaviorAnalyzer()
         self.coach = BehaviorCoach()
+        self.delivery = DeliveryAnalyzer()
         self.history: list[dict] = []
         self.started_at = time.time()
         self.deadline = self.started_at + meta.get("duration_minutes", 15) * 60
@@ -138,6 +140,7 @@ class LiveSession:
         self.ended = False
         self.stt: Optional[kyutai.KyutaiSTT] = None
         self.partial = ""
+        self._utterance_started_at: Optional[float] = None
         self._frame_count = 0
 
         chunks = [c["text"] for c in rag_store.search(
@@ -207,14 +210,22 @@ class LiveSession:
         })
         await speech.finish()
 
-    async def handle_user_text(self, text: str) -> None:
-        """Process a completed user utterance and produce the reply."""
+    async def handle_user_text(self, text: str, duration: Optional[float] = None) -> None:
+        """Process a completed user utterance and produce the reply.
+
+        ``duration`` is the spoken length in seconds when known (voice turns),
+        used to estimate speaking pace; it is None for typed turns.
+        """
         text = text.strip()
         if not text or self.ended:
             return
         self.history.append({"role": "user", "content": text})
         storage.append_transcript(self.id, {"role": "user", "text": text})
         await self.send({"type": "user_message", "text": text})
+
+        tip = self.delivery.observe(text, duration)
+        if tip is not None:
+            await self.send({"type": "coach_tip", **tip})
 
         if self.seconds_left() <= 0:
             await self._assistant_turn(extra_note=FORCE_END_NOTE)
@@ -231,14 +242,18 @@ class LiveSession:
         loop = asyncio.get_running_loop()
         text = await loop.run_in_executor(None, self.stt.feed, audio)
         if text:
+            if self._utterance_started_at is None:
+                self._utterance_started_at = time.time()
             self.partial += text
             await self.send({"type": "partial_transcript", "text": self.partial})
 
     async def commit_utterance(self) -> None:
         """Client detected end of speech, finalize the pending transcript."""
         text, self.partial = self.partial, ""
+        started, self._utterance_started_at = self._utterance_started_at, None
         if text.strip():
-            await self.handle_user_text(text)
+            duration = (time.time() - started) if started else None
+            await self.handle_user_text(text, duration)
 
     async def handle_frame(self, jpeg_b64: str) -> None:
         """Analyze one webcam frame off the event loop."""
@@ -268,11 +283,12 @@ class LiveSession:
         if self.stt is not None:
             self.stt.stop()
         summary = self.behavior.summary()
+        delivery = self.delivery.summary()
         storage.update_meta(self.id, status="generating_report", ended_at=time.time(),
-                            end_reason=reason, behavior_summary=summary)
+                            end_reason=reason, behavior_summary=summary, delivery_summary=delivery)
         await self.send({"type": "generating_report"})
         try:
-            report = await generate_report(self.id, summary)
+            report = await generate_report(self.id, summary, delivery)
             await self.send({"type": "session_ended", "reason": reason, "report": report})
         except Exception as e:
             storage.update_meta(self.id, status="report_failed")

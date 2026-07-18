@@ -41,6 +41,17 @@ export function ReportView({ report }: { report: Report }) {
         </section>
       )}
 
+      {report.delivery?.available && (
+        <section>
+          <h3>Delivery metrics</h3>
+          <ul>
+            <li>Filler words: {report.delivery.filler_count} ({report.delivery.filler_rate_pct}% of words)</li>
+            {report.delivery.avg_wpm != null && <li>Speaking pace: {report.delivery.avg_wpm} words/min</li>}
+            <li>Words spoken: {report.delivery.total_words} across {report.delivery.utterances} turns</li>
+          </ul>
+        </section>
+      )}
+
       {report.strengths?.length > 0 && (
         <section>
           <h3>Strengths</h3>

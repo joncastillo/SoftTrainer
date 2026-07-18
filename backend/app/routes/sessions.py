@@ -152,6 +152,8 @@ async def session_socket(ws: WebSocket, session_id: str) -> None:
                 await live.handle_audio(msg.get("pcm16_b64", ""))
             elif kind == "utterance_end":
                 await live.commit_utterance()
+            elif kind == "speaking_state":
+                live.set_client_speaking(bool(msg.get("active")))
             elif kind == "frame":
                 await live.handle_frame(msg.get("jpeg_b64", ""))
             elif kind == "end":

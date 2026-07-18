@@ -145,6 +145,9 @@ class LiveSession:
         self.stt: Optional[kyutai.KyutaiSTT] = None
         self.partial = ""
         self._utterance_started_at: Optional[float] = None
+        # Browser-recognition clients report speech activity explicitly,
+        # since their audio never reaches the server.
+        self._client_speaking_since: Optional[float] = None
         self._frame_count = 0
 
         chunks = [c["text"] for c in rag_store.search(
@@ -156,6 +159,19 @@ class LiveSession:
 
     def seconds_left(self) -> float:
         return max(0.0, self.deadline - time.time())
+
+    def set_client_speaking(self, active: bool) -> None:
+        """Speech-activity signal from clients using browser recognition."""
+        if active:
+            if self._client_speaking_since is None:
+                self._client_speaking_since = time.time()
+        else:
+            self._client_speaking_since = None
+
+    def user_speaking_seconds(self) -> float:
+        """How long the user has been talking right now, 0 when silent."""
+        since = self._utterance_started_at or self._client_speaking_since
+        return time.time() - since if since else 0.0
 
     async def send(self, payload: dict) -> None:
         await self.ws.send_json(payload)

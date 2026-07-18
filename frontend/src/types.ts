@@ -119,12 +119,14 @@ export interface ChatMessage {
   text: string;
   streaming?: boolean;
   kind?: string;
+  interrupt?: boolean;
 }
 
 export interface ComposureSummary {
   available?: boolean;
   events?: number;
   level?: string;
+  interruptions_mid_sentence?: number;
   filler_rate_baseline_pct?: number;
   filler_rate_under_pressure_pct?: number;
   eye_contact_baseline_pct?: number;

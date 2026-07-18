@@ -37,6 +37,7 @@ export interface SessionSocketApi extends SessionSocketState {
   sendFrame: (jpegB64: string) => void;
   endSession: () => void;
   getAudioLevel: () => number;
+  sendSpeakingState: (active: boolean) => void;
 }
 
 export function useSessionSocket(sessionId: string, enabled: boolean = true): SessionSocketApi {
@@ -92,7 +93,11 @@ export function useSessionSocket(sessionId: string, enabled: boolean = true): Se
       // Side effects stay out of the state updater. StrictMode invokes
       // updaters twice in dev, which made TTS speak every reply twice.
       if (msg.type === "tts_audio") {
-        audio.enqueueWavBase64(msg.wav_b64);
+        if (msg.channel === "heckler") {
+          audio.playInterruptWavBase64(msg.wav_b64);
+        } else {
+          audio.enqueueWavBase64(msg.wav_b64);
+        }
         return;
       }
       if (msg.type === "session_started") {
@@ -100,6 +105,10 @@ export function useSessionSocket(sessionId: string, enabled: boolean = true): Se
       }
       if (msg.type === "assistant_message" && speechRef.current && !speechRef.current.tts_available) {
         audio.speakFallback(msg.spoken ?? msg.text);
+      }
+      if (msg.type === "pressure_event" && msg.kind === "heckle" &&
+          speechRef.current && !speechRef.current.tts_available) {
+        audio.speakInterruptFallback(msg.text);
       }
 
       setState((s) => {
@@ -138,7 +147,8 @@ export function useSessionSocket(sessionId: string, enabled: boolean = true): Se
           case "pressure_event":
             return {
               ...s,
-              messages: [...s.messages, { role: "event", text: msg.text, kind: msg.kind }],
+              messages: [...s.messages,
+                { role: "event", text: msg.text, kind: msg.kind, interrupt: msg.interrupt }],
               pressureEvent: { id: (s.pressureEvent?.id ?? 0) + 1, kind: msg.kind },
             };
           case "partial_transcript":
@@ -192,5 +202,7 @@ export function useSessionSocket(sessionId: string, enabled: boolean = true): Se
     sendFrame: useCallback((jpeg_b64: string) => send({ type: "frame", jpeg_b64 }), [send]),
     endSession: useCallback(() => send({ type: "end" }), [send]),
     getAudioLevel: useCallback(() => audioRef.current?.getLevel() ?? 0, []),
+    sendSpeakingState: useCallback(
+      (active: boolean) => send({ type: "speaking_state", active }), [send]),
   };
 }

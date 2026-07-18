@@ -57,6 +57,7 @@ export function SessionPage() {
   const [clock, setClock] = useState<number | null>(null);
   const micRef = useRef<MicHandle | null>(null);
   const recognitionRef = useRef<any>(null);
+  const browserSpeakingRef = useRef(false);
   const listeningRef = useRef(false);
   const trainerSpeakingRef = useRef(false);
   const logRef = useRef<HTMLDivElement>(null);
@@ -126,19 +127,32 @@ export function SessionPage() {
     rec.lang = navigator.language || "en-US";
     rec.continuous = true;
     rec.interimResults = true;
+    // The server can only interrupt mid-sentence if it knows the user is
+    // talking; browser recognition audio never reaches it, so report speech
+    // activity transitions explicitly.
+    const setSpeaking = (active: boolean) => {
+      if (browserSpeakingRef.current !== active) {
+        browserSpeakingRef.current = active;
+        socket.sendSpeakingState(active);
+      }
+    };
     rec.onresult = (e: any) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const result = e.results[i];
         if (result.isFinal) {
           const text = result[0].transcript.trim();
+          setSpeaking(false);
           if (text) socket.sendText(text);
           setBrowserPartial("");
         } else {
           interim += result[0].transcript;
         }
       }
-      if (interim) setBrowserPartial(interim);
+      if (interim) {
+        setSpeaking(true);
+        setBrowserPartial(interim);
+      }
     };
     rec.onerror = (e: any) => {
       if (e.error === "no-speech" || e.error === "aborted") return;
@@ -152,6 +166,7 @@ export function SessionPage() {
     // Chrome stops listening after pauses, restart while the mic is on
     // but stay quiet while the trainer is speaking to avoid echo.
     rec.onend = () => {
+      setSpeaking(false);
       setBrowserPartial("");
       if (listeningRef.current && !trainerSpeakingRef.current) {
         try {
@@ -289,6 +304,7 @@ export function SessionPage() {
               {m.role === "event" && (
                 <span className="event-label">
                   {m.kind === "heckle" ? "Audience" : "Distraction"}
+                  {m.interrupt ? " · interrupting" : ""}
                 </span>
               )}
               {m.role === "assistant" ? <Markdown text={m.text} /> : m.text}

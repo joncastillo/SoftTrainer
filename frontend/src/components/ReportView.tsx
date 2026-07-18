@@ -86,6 +86,8 @@ export function ReportView({ report }: { report: Report }) {
           <p className="hint">
             {report.composure.events} heckle/distraction event
             {report.composure.events === 1 ? "" : "s"} at {report.composure.level} pressure
+            {(report.composure.interruptions_mid_sentence ?? 0) > 0 &&
+              `, ${report.composure.interruptions_mid_sentence} cutting in mid-sentence`}
           </p>
           <ul>
             {report.composure.filler_rate_under_pressure_pct != null && (

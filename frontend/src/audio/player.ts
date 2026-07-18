@@ -36,6 +36,21 @@ export class AudioQueue {
     void this.drain();
   }
 
+  /** Heckler channel: plays immediately, over anything else — including the
+   *  user speaking. It bypasses the trainer queue, the speaking state and
+   *  the avatar analyser, because the interruption is the point. */
+  playInterruptWavBase64(b64: string) {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    void this.ctx.decodeAudioData(bytes.buffer).then((audio) => {
+      const src = this.ctx.createBufferSource();
+      src.buffer = audio;
+      src.connect(this.ctx.destination);
+      src.start();
+    }).catch(() => {
+      /* skip undecodable chunk */
+    });
+  }
+
   private async drain() {
     if (this.playing) return;
     this.playing = true;
@@ -57,6 +72,16 @@ export class AudioQueue {
     }
     this.playing = false;
     this.onStateChange?.(false);
+  }
+
+  /** Browser-voice heckle: speaks without touching the speaking state so
+   *  recognition keeps listening while the user is being talked over. */
+  speakInterruptFallback(text: string) {
+    if (!("speechSynthesis" in window) || !text.trim()) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.05;
+    utterance.pitch = 0.8;
+    window.speechSynthesis.speak(utterance);
   }
 
   speakFallback(text: string) {

@@ -20,6 +20,23 @@ feedback and a written assessment at the end.
   session (look at the camera more, keep your head steadier, relax your
   expression, center yourself in frame), plus the occasional bit of praise.
   Rule based and fully local, with cooldowns so it nudges rather than nags.
+- Speech delivery analysis: filler words and speaking pace measured locally
+  from the transcript, with live tips and a report section.
+- Key points: name up to five things you want to land; a live checklist
+  tracks coverage, and losing your train of thought earns a supportive
+  recovery tip anchored to your next uncovered point.
+- Pressure training: an optional heckler/distraction director interjects
+  audience heckles (spoken and on screen) and room noise — including
+  cutting you off mid-sentence — while composure scoring compares your
+  delivery and eye contact under pressure against your baseline.
+- Embodiment: a stylized talking-head trainer lip-synced to the TTS audio,
+  a reactive audience strip, and procedural room ambience during pressure
+  sessions.
+- Anxiety support: an optional grounding breath before the session, a
+  post-session reflection card, and a graded-exposure ladder suggestion on
+  the Progress page. Practice tool, not a medical device.
+- Longitudinal progress: per-metric trends across sessions (score, fillers,
+  pace, eye contact, focus, key-point coverage) with sparkline tiles.
 - Sessions are bounded like real meetings. The trainer wraps up naturally
   when time runs low and closes when it runs out.
 - Final report: overall score, per dimension scores, strengths, concrete

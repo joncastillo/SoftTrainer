@@ -36,9 +36,11 @@ real meeting would end.
 
 PRESSURE_TEMPLATE = """
 - This is pressure training: an unseen audience occasionally heckles or the room \
-gets distracting. Those interjections are shown to the user directly; you do not \
-repeat them. Stay in character, keep the meeting on track, and react naturally, \
-briefly acknowledging an interruption at most.
+gets distracting, sometimes cutting the user off mid-sentence. Those interjections \
+are shown to the user directly; you do not repeat them. Stay in character, keep the \
+meeting on track, and react naturally, briefly acknowledging an interruption at \
+most. When the user was cut off, give them the floor back so they can finish the \
+thought.
 """
 
 CONTEXT_TEMPLATE = """
@@ -116,6 +118,8 @@ def build_report_user_prompt(scenario: str, transcript: list[dict], behavior: di
     roles = {"user": "Candidate", "assistant": "Trainer", "event": "Audience/Room"}
     for entry in transcript:
         who = roles.get(entry["role"], entry["role"])
+        if entry.get("interrupt"):
+            who = "Audience (interrupting the candidate mid-sentence)"
         lines.append(f"{who}: {entry['text']}")
     lines.append("")
     if behavior.get("available"):

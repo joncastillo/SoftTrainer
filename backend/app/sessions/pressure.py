@@ -32,6 +32,12 @@ LEVELS = {
 FIRST_EVENT_GRACE = 45.0   # let the session settle before the first event
 POST_WINDOW = 30.0         # seconds after an event that count as "under pressure"
 
+# Fraction of events that deliberately wait for the user to be mid-sentence
+# before cutting in; the rest fire on the timer wherever it lands.
+INTERRUPT_PROB = {"low": 0.3, "medium": 0.5, "high": 0.7}
+INTERRUPT_MIN_SPEECH = 2.5   # seconds into an utterance before barging in
+INTERRUPT_WAIT_MAX = 40.0    # give up waiting for speech and fire anyway
+
 HECKLES = [
     "Sorry, but I'm not convinced. Why should we believe that?",
     "That's what everyone says. What makes you different?",
@@ -41,6 +47,15 @@ HECKLES = [
     "You're losing me. Explain it like I'm not an expert.",
     "Numbers, please. Do you actually have any numbers?",
     "With respect, I've seen a dozen pitches exactly like this.",
+]
+
+# Phrased as barge-ins: these land while the user is mid-sentence.
+INTERRUPT_HECKLES = [
+    "Hold on, hold on. Before you go any further, why should we care?",
+    "Sorry to cut you off, but I've heard this part before. Skip ahead.",
+    "Let me stop you right there. That's not answering my question.",
+    "Wait, wait. Say that again, but simpler this time.",
+    "I'm going to interrupt. What's the actual bottom line here?",
 ]
 
 DISTRACTIONS = [
@@ -60,6 +75,7 @@ class PressureDirector:
         self.level = level if level in LEVELS else "off"
         self.event_times: list[float] = []   # monotonic timestamps
         self.event_count = 0
+        self.interrupt_count = 0
         self._task: Optional[asyncio.Task] = None
         self._recent: list[str] = []
 
@@ -94,22 +110,45 @@ class PressureDirector:
             first = False
             if session.ended or session.seconds_left() < 30:
                 return
-            await self._fire(session)
+            # Some events specifically hunt for a mid-sentence moment; and
+            # any event that happens to land during speech is a barge-in.
+            if random.random() < INTERRUPT_PROB[self.level]:
+                await self._wait_for_speech(session)
+            if session.ended or session.seconds_left() < 30:
+                return
+            interrupt = session.user_speaking_seconds() > 0.5
+            await self._fire(session, interrupt)
 
-    async def _fire(self, session: "LiveSession") -> None:
-        heckle = random.random() < 0.6
+    @staticmethod
+    async def _wait_for_speech(session: "LiveSession") -> None:
+        deadline = time.monotonic() + INTERRUPT_WAIT_MAX
+        while time.monotonic() < deadline and not session.ended:
+            if session.user_speaking_seconds() >= INTERRUPT_MIN_SPEECH:
+                return
+            await asyncio.sleep(0.5)
+
+    async def _fire(self, session: "LiveSession", interrupt: bool = False) -> None:
+        heckle = interrupt or random.random() < 0.6
         kind = "heckle" if heckle else "distraction"
-        text = self._pick(HECKLES if heckle else DISTRACTIONS)
+        pool = INTERRUPT_HECKLES if interrupt else (HECKLES if heckle else DISTRACTIONS)
+        text = self._pick(pool)
         self.event_times.append(time.monotonic())
         self.event_count += 1
-        storage.append_transcript(session.id, {"role": "event", "kind": kind, "text": text})
-        await session.send({"type": "pressure_event", "kind": kind, "text": text})
+        if interrupt:
+            self.interrupt_count += 1
+        storage.append_transcript(session.id, {
+            "role": "event", "kind": kind, "text": text, "interrupt": interrupt})
+        await session.send({"type": "pressure_event", "kind": kind, "text": text,
+                            "interrupt": interrupt})
         if heckle and engines.tts_installed():
             try:
                 wav = await engines.synthesize_async(text)
                 if wav:
-                    await session.send(
-                        {"type": "tts_audio", "wav_b64": base64.b64encode(wav).decode()})
+                    # The heckler channel plays immediately on the client,
+                    # over the user's own voice, instead of queueing behind
+                    # trainer speech: that is what makes it an interruption.
+                    await session.send({"type": "tts_audio", "channel": "heckler",
+                                        "wav_b64": base64.b64encode(wav).decode()})
             except Exception:
                 pass  # a silent heckle still lands on screen
 
@@ -127,7 +166,8 @@ class PressureDirector:
         if not self.enabled or not self.event_times:
             return {"available": False, "events": self.event_count}
 
-        out: dict = {"available": True, "events": self.event_count, "level": self.level}
+        out: dict = {"available": True, "events": self.event_count, "level": self.level,
+                     "interruptions_mid_sentence": self.interrupt_count}
 
         pressured = [r for r in delivery_records if self.under_pressure(r["t"])]
         calm = [r for r in delivery_records if not self.under_pressure(r["t"])]

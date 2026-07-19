@@ -23,6 +23,7 @@ export function SetupPage() {
   const [subtitles, setSubtitles] = useState(true);
   const [pressure, setPressure] = useState("off");
   const [grounding, setGrounding] = useState(false);
+  const [voiceMode, setVoiceMode] = useState("cascade");
   const [keyPoints, setKeyPoints] = useState<string[]>(["", "", ""]);
   const [documents, setDocuments] = useState<DocumentMeta[]>([]);
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
@@ -69,6 +70,7 @@ export function SetupPage() {
         key_points: keyPoints.map((p) => p.trim()).filter(Boolean),
         pressure,
         grounding,
+        voice_mode: voiceMode,
       });
       navigate(`/session/${id}`);
     } catch (e: any) {
@@ -142,6 +144,21 @@ export function SetupPage() {
         <label className="checkbox" title="A 30-second guided breath before the trainer starts">
           <input type="checkbox" checked={grounding} onChange={(e) => setGrounding(e.target.checked)} />
           Grounding breath
+        </label>
+        <label
+          title={
+            "Full duplex: the trainer listens while speaking, so it handles " +
+            "interruptions and overlaps naturally (needs the PersonaPlex server " +
+            "running; headphones recommended). Best for conversational practice; " +
+            "for deep technical interviews the classic voice with a strong " +
+            "provider asks better questions."
+          }
+        >
+          Voice
+          <select value={voiceMode} onChange={(e) => setVoiceMode(e.target.value)}>
+            <option value="cascade">Classic (turn based)</option>
+            <option value="duplex">Full duplex (PersonaPlex)</option>
+          </select>
         </label>
       </div>
 

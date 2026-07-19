@@ -21,6 +21,11 @@ class SessionCreate(BaseModel):
         description="Heckler/distraction intensity during the session")
     grounding: bool = Field(
         default=False, description="Start with a short breathing exercise")
+    voice_mode: str = Field(
+        default="cascade", pattern="^(cascade|duplex)$",
+        description="duplex = PersonaPlex full-duplex speech when available")
+    voice_preset: Optional[str] = Field(
+        default=None, description="PersonaPlex voice prompt file, e.g. NATF2.pt")
 
 
 class ProviderConfig(BaseModel):

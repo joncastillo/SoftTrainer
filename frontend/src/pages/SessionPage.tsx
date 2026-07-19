@@ -57,6 +57,10 @@ export function SessionPage() {
   const [clock, setClock] = useState<number | null>(null);
   const micRef = useRef<MicHandle | null>(null);
   const recognitionRef = useRef<any>(null);
+  // Browser recognition finalizes a result at every short pause; collect
+  // finals here and only send once the user has actually stopped talking.
+  const pendingFinalRef = useRef("");
+  const flushTimerRef = useRef<number | null>(null);
   const browserSpeakingRef = useRef(false);
   const listeningRef = useRef(false);
   const trainerSpeakingRef = useRef(false);
@@ -100,8 +104,23 @@ export function SessionPage() {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
   }, [socket.messages, socket.partial]);
 
+  const flushPending = useCallback(() => {
+    if (flushTimerRef.current != null) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    const text = pendingFinalRef.current.trim();
+    pendingFinalRef.current = "";
+    setBrowserPartial("");
+    if (text) socket.sendText(text);
+    // Depend on the stable sendText callback, NOT the socket object: that
+    // changes identity every state update, which would make stopMic unstable
+    // and re-trigger its unmount-cleanup effect, killing the mic instantly.
+  }, [socket.sendText]);
+
   const stopMic = useCallback(() => {
     listeningRef.current = false;
+    flushPending();
     micRef.current?.stop();
     micRef.current = null;
     try {
@@ -112,7 +131,7 @@ export function SessionPage() {
     recognitionRef.current = null;
     setBrowserPartial("");
     setMicOn(false);
-  }, []);
+  }, [flushPending]);
 
   const startBrowserRecognition = useCallback((): boolean => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -143,16 +162,28 @@ export function SessionPage() {
         if (result.isFinal) {
           const text = result[0].transcript.trim();
           setSpeaking(false);
-          if (text) socket.sendText(text);
-          setBrowserPartial("");
+          // Do not send yet: a final result only means a short pause. Hold
+          // it and wait; if the user keeps going the pieces join into one turn.
+          if (text) {
+            pendingFinalRef.current =
+              (pendingFinalRef.current + " " + text).trim();
+          }
         } else {
           interim += result[0].transcript;
         }
       }
       if (interim) {
         setSpeaking(true);
-        setBrowserPartial(interim);
+        // Still talking: never flush mid-utterance.
+        if (flushTimerRef.current != null) {
+          clearTimeout(flushTimerRef.current);
+          flushTimerRef.current = null;
+        }
+      } else if (pendingFinalRef.current) {
+        if (flushTimerRef.current != null) clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = window.setTimeout(flushPending, 1800);
       }
+      setBrowserPartial((pendingFinalRef.current + " " + interim).trim());
     };
     rec.onerror = (e: any) => {
       if (e.error === "no-speech" || e.error === "aborted") return;
@@ -167,7 +198,7 @@ export function SessionPage() {
     // but stay quiet while the trainer is speaking to avoid echo.
     rec.onend = () => {
       setSpeaking(false);
-      setBrowserPartial("");
+      setBrowserPartial(pendingFinalRef.current);
       if (listeningRef.current && !trainerSpeakingRef.current) {
         try {
           rec.start();
@@ -183,7 +214,7 @@ export function SessionPage() {
       /* already started */
     }
     return true;
-  }, [socket]);
+  }, [socket.sendText, socket.sendSpeakingState, flushPending]);
 
   const toggleMic = useCallback(async () => {
     setMicError("");
@@ -191,7 +222,8 @@ export function SessionPage() {
       stopMic();
       return;
     }
-    if (socket.serverSpeech?.stt_available) {
+    const duplex = socket.serverSpeech?.mode === "duplex";
+    if (socket.serverSpeech?.stt_available || duplex) {
       try {
         micRef.current = await startMic(socket.sendAudio, socket.endUtterance);
       } catch {
@@ -213,6 +245,14 @@ export function SessionPage() {
 
   useEffect(() => {
     trainerSpeakingRef.current = socket.speaking;
+    // Half-duplex (cascade mode only): echo cancellation does not cover the
+    // page's own WebAudio playback, so an open mic transcribes the trainer's
+    // voice and the app answers itself. Mute capture while trainer audio is
+    // playing. In duplex mode the mic MUST stay open while the trainer talks
+    // - overlap is the point - so PersonaPlex hears interruptions.
+    if (socket.serverSpeech?.mode !== "duplex") {
+      micRef.current?.setPaused(socket.speaking);
+    }
     const rec = recognitionRef.current;
     if (!rec || !listeningRef.current) return;
     if (socket.speaking) {
@@ -228,7 +268,7 @@ export function SessionPage() {
         /* already running */
       }
     }
-  }, [socket.speaking]);
+  }, [socket.speaking, socket.serverSpeech]);
 
   const submitDraft = () => {
     if (draft.trim()) {
@@ -268,7 +308,9 @@ export function SessionPage() {
           {socket.generatingReport && <span>preparing your report...</span>}
           {socket.serverSpeech && (
             <span className="tag" title={socket.serverSpeech.tts_detail ?? ""}>
-              voice: {socket.serverSpeech.tts_engine ?? "browser"}
+              voice: {socket.serverSpeech.mode === "duplex"
+                ? "personaplex (full duplex)"
+                : socket.serverSpeech.tts_engine ?? "browser"}
             </span>
           )}
         </div>
@@ -332,6 +374,12 @@ export function SessionPage() {
             <button className={micOn ? "danger" : "primary"} onClick={toggleMic} disabled={socket.ended}>
               {micOn ? "Mute microphone" : "Enable microphone"}
             </button>
+            {socket.serverSpeech?.mode === "duplex" && !micOn && (
+              <p className="hint">
+                Full-duplex session: enable the microphone and just talk —
+                you can interrupt the trainer any time. Headphones recommended.
+              </p>
+            )}
             {micError && <p className="error">{micError}</p>}
           </div>
           <div className="text-input">

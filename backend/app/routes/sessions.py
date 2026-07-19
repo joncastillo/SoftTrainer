@@ -28,6 +28,8 @@ def create_session(body: SessionCreate) -> dict:
         "key_points": [p.strip() for p in body.key_points if p.strip()],
         "pressure": body.pressure,
         "grounding": body.grounding,
+        "voice_mode": body.voice_mode,
+        "voice_preset": body.voice_preset,
     })
     return {"id": session_id}
 

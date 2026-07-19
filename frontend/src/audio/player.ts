@@ -36,6 +36,60 @@ export class AudioQueue {
     void this.drain();
   }
 
+  // --- Full-duplex streaming channel -----------------------------------
+  // PersonaPlex sends a continuous stream of small PCM chunks (including
+  // silence). Chunks are scheduled back to back on the context clock with
+  // a small jitter buffer; the analyser still drives the avatar mouth.
+  private streamAt = 0;
+  private streamEndTimer: number | undefined;
+  private pendingSources: AudioBufferSourceNode[] = [];
+  // Max seconds of audio scheduled ahead of the clock. Without a cap,
+  // every burst or hiccup grows the gap between the model speaking and
+  // the user hearing it, and the lag compounds for the whole session.
+  private static MAX_AHEAD = 0.35;
+
+  enqueuePcm16Base64(b64: string, sampleRate: number) {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const i16 = new Int16Array(bytes.buffer, 0, bytes.byteLength >> 1);
+    if (i16.length === 0) return;
+    const f32 = new Float32Array(i16.length);
+    for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+    const buf = this.ctx.createBuffer(1, f32.length, sampleRate);
+    buf.getChannelData(0).set(f32);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(this.analyser);
+    const now = this.ctx.currentTime;
+    // Re-arm the jitter buffer after an underrun or on the first chunk.
+    if (this.streamAt < now + 0.02) this.streamAt = now + 0.1;
+    // Latency cap: if playback has drifted too far behind, drop what is
+    // queued and resync close to the clock. Losing a syllable beats a
+    // conversation that runs seconds behind.
+    if (this.streamAt - now > AudioQueue.MAX_AHEAD) {
+      for (const s of this.pendingSources) {
+        try { s.stop(); } catch { /* already done */ }
+      }
+      this.pendingSources = [];
+      this.streamAt = now + 0.1;
+    }
+    src.onended = () => {
+      const i = this.pendingSources.indexOf(src);
+      if (i >= 0) this.pendingSources.splice(i, 1);
+    };
+    this.pendingSources.push(src);
+    src.start(this.streamAt);
+    this.streamAt += buf.duration;
+    if (!this.playing) {
+      this.playing = true;
+      this.onStateChange?.(true);
+    }
+    if (this.streamEndTimer !== undefined) clearTimeout(this.streamEndTimer);
+    this.streamEndTimer = window.setTimeout(() => {
+      this.playing = false;
+      this.onStateChange?.(false);
+    }, (this.streamAt - now) * 1000 + 300);
+  }
+
   /** Heckler channel: plays immediately, over anything else — including the
    *  user speaking. It bypasses the trainer queue, the speaking state and
    *  the avatar analyser, because the interruption is the point. */

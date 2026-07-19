@@ -25,9 +25,14 @@ def transformers_available() -> bool:
 
 def load_model(repo_id: str, local_path: str) -> None:
     """Load a downloaded model into memory, cached by repo id."""
+    import os
+
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    # VRAM is budgeted for the speech stack (PersonaPlex + Kyutai STT);
+    # the local LLM stays on CPU unless explicitly allowed onto the GPU.
+    use_gpu = os.environ.get("SOFTTRAINER_LLM_GPU") == "1" and torch.cuda.is_available()
     with _lock:
         if repo_id in _loaded:
             return
@@ -35,7 +40,7 @@ def load_model(repo_id: str, local_path: str) -> None:
         model = AutoModelForCausalLM.from_pretrained(
             local_path,
             torch_dtype="auto",
-            device_map="auto" if torch.cuda.is_available() else None,
+            device_map="auto" if use_gpu else None,
         )
         _loaded[repo_id] = (tokenizer, model)
 

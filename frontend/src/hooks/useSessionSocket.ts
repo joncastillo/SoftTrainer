@@ -10,6 +10,8 @@ export interface ServerSpeech {
   tts_available: boolean;
   tts_engine?: string | null;
   tts_detail?: string;
+  /** "duplex" when PersonaPlex owns the conversation, else "cascade". */
+  mode?: string;
 }
 
 export interface SessionSocketState {
@@ -98,6 +100,10 @@ export function useSessionSocket(sessionId: string, enabled: boolean = true): Se
         } else {
           audio.enqueueWavBase64(msg.wav_b64);
         }
+        return;
+      }
+      if (msg.type === "duplex_audio") {
+        audio.enqueuePcm16Base64(msg.pcm16_b64, msg.sample_rate ?? 24000);
         return;
       }
       if (msg.type === "session_started") {

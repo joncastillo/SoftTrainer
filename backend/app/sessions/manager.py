@@ -13,16 +13,20 @@ from typing import Optional
 
 from fastapi import WebSocket
 
+import numpy as np
+
 from .. import storage
 from ..llm.registry import get_provider
 from ..rag import store as rag_store
+from ..speech import duplex as duplex_bridge
 from ..speech import engines, kyutai
 from ..vision.behavior import BehaviorAnalyzer
 from ..vision.coach import BehaviorCoach
 from .delivery import DeliveryAnalyzer
 from .keypoints import KeyPointTracker
 from .pressure import PressureDirector
-from .prompts import FORCE_END_NOTE, WRAPUP_NOTE, build_system_prompt
+from .prompts import (FORCE_END_NOTE, WRAPUP_NOTE, build_persona_prompt,
+                      build_system_prompt)
 from .report import generate_report
 
 WRAPUP_SECONDS = 120
@@ -149,6 +153,18 @@ class LiveSession:
         # since their audio never reaches the server.
         self._client_speaking_since: Optional[float] = None
         self._frame_count = 0
+        # Full-duplex mode: PersonaPlex owns the conversation and our LLM
+        # provider is only used for the final report. None = cascade mode.
+        self.duplex: Optional[duplex_bridge.PersonaPlexBridge] = None
+        self._duplex_text = ""
+        self._duplex_flush: Optional[asyncio.Task] = None
+        # STT runs decoupled from the socket loop: on a CPU-only torch it is
+        # slower than realtime, and awaiting it per chunk backs up the whole
+        # WebSocket (audio stops reaching the duplex model in realtime and
+        # the app appears deaf). Frames queue here; when the queue overflows
+        # we drop the oldest and lose a little transcript, never latency.
+        self._stt_queue: asyncio.Queue = asyncio.Queue(maxsize=64)
+        self._stt_task: Optional[asyncio.Task] = None
 
         chunks = [c["text"] for c in rag_store.search(
             meta["scenario"], meta.get("document_ids", []), top_k=4)]
@@ -176,6 +192,58 @@ class LiveSession:
     async def send(self, payload: dict) -> None:
         await self.ws.send_json(payload)
 
+    async def _start_duplex(self) -> bool:
+        """Try to hand the conversation to PersonaPlex; False = use cascade."""
+        if self.meta.get("voice_mode") != "duplex":
+            return False
+        if not await duplex_bridge.probe():
+            return False
+        bridge = duplex_bridge.PersonaPlexBridge(
+            text_prompt=build_persona_prompt(
+                self.meta["scenario"], self.meta.get("difficulty", "medium")),
+            voice_prompt=self.meta.get("voice_preset") or duplex_bridge.DEFAULT_VOICE,
+            on_pcm=self._on_duplex_pcm,
+            on_text=self._on_duplex_text,
+        )
+        try:
+            await bridge.connect()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "PersonaPlex connect failed; falling back to cascade voice")
+            return False
+        self.duplex = bridge
+        return True
+
+    async def _on_duplex_pcm(self, pcm: np.ndarray) -> None:
+        """Model audio: forward to the client as raw PCM16 for streaming play."""
+        pcm16 = (np.clip(pcm, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+        await self.send({"type": "duplex_audio",
+                        "pcm16_b64": base64.b64encode(pcm16).decode(),
+                        "sample_rate": duplex_bridge.SAMPLE_RATE})
+
+    async def _on_duplex_text(self, piece: str) -> None:
+        """Model text stream: mirror to the UI, segment into transcript turns."""
+        self._duplex_text += piece
+        await self.send({"type": "assistant_delta", "text": piece})
+        if self._duplex_flush is not None:
+            self._duplex_flush.cancel()
+        self._duplex_flush = asyncio.create_task(self._flush_duplex_text())
+
+    async def _flush_duplex_text(self) -> None:
+        """After a lull in the model's speech, close out the transcript turn."""
+        try:
+            await asyncio.sleep(2.0)
+        except asyncio.CancelledError:
+            return
+        text, self._duplex_text = self._duplex_text.strip(), ""
+        if not text:
+            return
+        self.history.append({"role": "assistant", "content": text})
+        storage.append_transcript(self.id, {"role": "assistant", "text": text})
+        await self.send({"type": "assistant_message", "text": text,
+                        "spoken": text, "seconds_left": self.seconds_left()})
+
     async def start(self) -> None:
         """Kick off the session with the trainer speaking first."""
         storage.update_meta(self.id, status="active", started_at=self.started_at)
@@ -183,16 +251,25 @@ class LiveSession:
         if stt is not None:
             self.stt = stt
             stt.start()
+        duplex_on = await self._start_duplex()
+        speech = engines.speech_status()
+        speech["mode"] = "duplex" if duplex_on else "cascade"
         await self.send({
             "type": "session_started",
             "seconds_left": self.seconds_left(),
-            "speech": engines.speech_status(),
+            "speech": speech,
             "key_points": self.keypoints.points(),
         })
+        if duplex_on:
+            # PersonaPlex opens the conversation itself once audio flows.
+            self.pressure.start(self)
+            return
         opener = (
             "System note: the session begins now. Open in character with a warm, "
-            "natural introduction as described in your instructions, then lead "
-            "into your first question or opening move."
+            "natural introduction as described in your instructions, then ask your "
+            "first substantive, scenario-specific question (in an interview, a real "
+            "interview question). Never open with a generic question like what "
+            "brought them here or what they would like to discuss."
         )
         await self._assistant_turn(extra_note=opener)
         self.pressure.start(self)
@@ -237,7 +314,9 @@ class LiveSession:
         """Process a completed user utterance and produce the reply.
 
         ``duration`` is the spoken length in seconds when known (voice turns),
-        used to estimate speaking pace; it is None for typed turns.
+        used to estimate speaking pace; it is None for typed turns. In duplex
+        mode PersonaPlex already heard and is answering the audio itself, so
+        this only records the transcript and feeds the coaching trackers.
         """
         text = text.strip()
         if not text or self.ended:
@@ -257,6 +336,10 @@ class LiveSession:
         if tip is not None:
             await self.send({"type": "coach_tip", **tip})
 
+        if self.duplex is not None:
+            if self.seconds_left() <= 0:
+                await self.end("time_up")
+            return
         if self.seconds_left() <= 0:
             await self._assistant_turn(extra_note=FORCE_END_NOTE)
             await self.end("time_up")
@@ -264,18 +347,39 @@ class LiveSession:
         await self._assistant_turn()
 
     async def handle_audio(self, pcm16_b64: str) -> None:
-        """Feed mic audio into streaming STT and emit partial transcripts."""
-        if self.stt is None or self.ended:
+        """Feed mic audio to the duplex model and/or streaming STT.
+
+        Never blocks on STT: duplex audio is latency-critical and the
+        socket loop must keep draining even when STT is slower than
+        realtime (CPU-only torch).
+        """
+        if self.ended:
             return
-        import base64
         audio = kyutai.pcm16_to_float(base64.b64decode(pcm16_b64))
+        if self.duplex is not None:
+            await self.duplex.send_pcm(audio)
+        if self.stt is None:
+            return
+        if self._stt_task is None:
+            self._stt_task = asyncio.create_task(self._stt_worker())
+        if self._stt_queue.full():
+            self._stt_queue.get_nowait()  # drop oldest, keep latency bounded
+        self._stt_queue.put_nowait(audio)
+
+    async def _stt_worker(self) -> None:
+        """Drain mic frames through STT off the socket loop, in order."""
         loop = asyncio.get_running_loop()
-        text = await loop.run_in_executor(None, self.stt.feed, audio)
-        if text:
-            if self._utterance_started_at is None:
-                self._utterance_started_at = time.time()
-            self.partial += text
-            await self.send({"type": "partial_transcript", "text": self.partial})
+        while not self.ended:
+            audio = await self._stt_queue.get()
+            try:
+                text = await loop.run_in_executor(None, self.stt.feed, audio)
+            except Exception:
+                continue
+            if text:
+                if self._utterance_started_at is None:
+                    self._utterance_started_at = time.time()
+                self.partial += text
+                await self.send({"type": "partial_transcript", "text": self.partial})
 
     async def commit_utterance(self) -> None:
         """Client detected end of speech, finalize the pending transcript."""
@@ -311,6 +415,18 @@ class LiveSession:
             return
         self.ended = True
         self.pressure.stop()
+        if self.duplex is not None:
+            if self._duplex_flush is not None:
+                self._duplex_flush.cancel()
+            leftover = self._duplex_text.strip()
+            if leftover:
+                self.history.append({"role": "assistant", "content": leftover})
+                storage.append_transcript(self.id, {"role": "assistant", "text": leftover})
+            await self.duplex.close()
+            self.duplex = None
+        if self._stt_task is not None:
+            self._stt_task.cancel()
+            self._stt_task = None
         if self.stt is not None:
             self.stt.stop()
         summary = self.behavior.summary()

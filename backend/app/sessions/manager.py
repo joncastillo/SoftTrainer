@@ -25,11 +25,15 @@ from ..vision.coach import BehaviorCoach
 from .delivery import DeliveryAnalyzer
 from .keypoints import KeyPointTracker
 from .pressure import PressureDirector
-from .prompts import (FORCE_END_NOTE, WRAPUP_NOTE, build_persona_prompt,
-                      build_system_prompt)
+from .prompts import (ENCOURAGE_NOTE, FORCE_END_NOTE, WRAPUP_NOTE,
+                      build_persona_prompt, build_system_prompt)
 from .report import generate_report
 
 WRAPUP_SECONDS = 120
+# Silence after the trainer's turn before one gentle in-character
+# "take your time" reassurance. Long enough to cover TTS playback plus
+# genuine thinking time; the user should never feel checked up on.
+PATIENCE_SECONDS = 30
 CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
@@ -153,6 +157,10 @@ class LiveSession:
         # since their audio never reaches the server.
         self._client_speaking_since: Optional[float] = None
         self._frame_count = 0
+        # One reassurance per silence: armed after each trainer turn,
+        # cancelled the moment the user starts answering.
+        self._patience_task: Optional[asyncio.Task] = None
+        self._encouraged = False
         # Full-duplex mode: PersonaPlex owns the conversation and our LLM
         # provider is only used for the final report. None = cascade mode.
         self.duplex: Optional[duplex_bridge.PersonaPlexBridge] = None
@@ -179,10 +187,42 @@ class LiveSession:
     def set_client_speaking(self, active: bool) -> None:
         """Speech-activity signal from clients using browser recognition."""
         if active:
+            self._cancel_patience()
             if self._client_speaking_since is None:
                 self._client_speaking_since = time.time()
         else:
             self._client_speaking_since = None
+
+    def _cancel_patience(self) -> None:
+        if self._patience_task is not None:
+            self._patience_task.cancel()
+            self._patience_task = None
+
+    def _arm_patience(self) -> None:
+        """Reassure the user once if a question is met with long silence.
+
+        Real users pause to think; the trainer must never fill that pause
+        with another question. After PATIENCE_SECONDS of no answer it says
+        one warm "take your time" line, then waits indefinitely. The next
+        real user turn re-arms it. Skipped near the time limit so it never
+        collides with the wrap-up.
+        """
+        self._cancel_patience()
+        if self.ended or self._encouraged or self.seconds_left() < WRAPUP_SECONDS:
+            return
+        self._patience_task = asyncio.create_task(self._patience_watch())
+
+    async def _patience_watch(self) -> None:
+        try:
+            await asyncio.sleep(PATIENCE_SECONDS)
+        except asyncio.CancelledError:
+            return
+        # Detach before speaking so the turn cannot cancel itself.
+        self._patience_task = None
+        if self.ended or self.user_speaking_seconds() > 0 or self.partial:
+            return
+        self._encouraged = True
+        await self._assistant_turn(extra_note=ENCOURAGE_NOTE)
 
     def user_speaking_seconds(self) -> float:
         """How long the user has been talking right now, 0 when silent."""
@@ -309,6 +349,7 @@ class LiveSession:
             "seconds_left": self.seconds_left(),
         })
         await speech.finish()
+        self._arm_patience()
 
     async def handle_user_text(self, text: str, duration: Optional[float] = None) -> None:
         """Process a completed user utterance and produce the reply.
@@ -321,6 +362,8 @@ class LiveSession:
         text = text.strip()
         if not text or self.ended:
             return
+        self._cancel_patience()
+        self._encouraged = False
         self.history.append({"role": "user", "content": text})
         storage.append_transcript(self.id, {"role": "user", "text": text})
         await self.send({"type": "user_message", "text": text})
@@ -378,6 +421,7 @@ class LiveSession:
             if text:
                 if self._utterance_started_at is None:
                     self._utterance_started_at = time.time()
+                    self._cancel_patience()
                 self.partial += text
                 await self.send({"type": "partial_transcript", "text": self.partial})
 
@@ -414,6 +458,7 @@ class LiveSession:
         if self.ended:
             return
         self.ended = True
+        self._cancel_patience()
         self.pressure.stop()
         if self.duplex is not None:
             if self._duplex_flush is not None:

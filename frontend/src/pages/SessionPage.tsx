@@ -21,6 +21,11 @@ function formatTime(seconds: number): string {
 
 const GROUNDING_SECONDS = 30;
 
+// How long after the browser recognizer's last final result to wait before
+// sending the collected turn. Mirrors SILENCE_END_MS in mic.ts: a pause to
+// think must not hand the turn to the trainer.
+const FLUSH_PAUSE_MS = 2800;
+
 function GroundingOverlay({ onDone }: { onDone: () => void }) {
   const [left, setLeft] = useState(GROUNDING_SECONDS);
   useEffect(() => {
@@ -181,7 +186,7 @@ export function SessionPage() {
         }
       } else if (pendingFinalRef.current) {
         if (flushTimerRef.current != null) clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = window.setTimeout(flushPending, 1800);
+        flushTimerRef.current = window.setTimeout(flushPending, FLUSH_PAUSE_MS);
       }
       setBrowserPartial((pendingFinalRef.current + " " + interim).trim());
     };

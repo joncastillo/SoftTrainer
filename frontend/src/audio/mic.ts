@@ -11,9 +11,11 @@ export interface MicHandle {
 
 const TARGET_RATE = 24000;
 // How long a pause has to be before it counts as end of utterance. Too
-// short and the trainer jumps in mid-thought; the response delay is
-// dominated by STT/TTS compute, not this window.
-const SILENCE_END_MS = 1500;
+// short and the trainer jumps in mid-thought while the user is only
+// pausing to gather their words - which reads as being rushed. Generous
+// beats snappy here: the response delay is dominated by STT/TTS compute,
+// not this window.
+const SILENCE_END_MS = 2500;
 // Ignore blips shorter than this (a cough, a chair scrape) instead of
 // committing them as a turn.
 const MIN_VOICED_MS = 250;
